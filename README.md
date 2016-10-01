@@ -1,0 +1,4 @@
+# R code to accompany Real-World Machine Learning
+
+Provides R code to accompany the book "Real-World Machine Learning" as
+described at [dataprone.info](http://padamson.github.io/r/machine%20learning/ggplot2/dplyr/tidyr/2016/10/01/real-world-machine-learning-with-R-intro.html).
