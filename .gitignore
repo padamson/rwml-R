@@ -1,1 +1,4 @@
 *.html
+.Rhistory
+*_files
+*_cache
