@@ -1,13 +1,15 @@
 ---
 title: "Real-World Machine Learning (with R): Chapter 3"
 author: "Paul Adamson"
-date: "October 4, 2016"
+date: "October 15, 2016"
 output: html_document
 ---
 
-R code to accompany Chapter 3 of the book "Real-World Machine Learning". 
-The [caret](http://topepo.github.io/caret/index.html) package is used
-extensively.
+This notebook contains R code to accompany Chapter 3 of the book 
+["Real-World Machine Learning"](https://www.manning.com/books/real-world-machine-learning),
+by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  It is part of a 
+series of R Markdown notebooks hosted on GitHub in the 
+[rwml-R repo](https://github.com/padamson/rwml-R).
 
 ```{r setup, include=FALSE}
 library(knitr)
@@ -29,6 +31,12 @@ set.seed(3456)
 
 ## Figure 3.4 A subset of the Titanic Passengers dataset
 
+We are going to be interested in predicting survival, so it is useful to specify 
+the `Survived` variable to be of type `factor`. For visualizing the data, 
+it is also useful to use the `revalue` function to specify the `no` and `yes`
+levels for the `factor` variable. The `kable` function is built into the `knitr`
+package.
+
 ```{r figure3.4, cache=TRUE}
 titanic <- read.csv("data/titanic.csv", 
                     colClasses = c(
@@ -36,17 +44,13 @@ titanic <- read.csv("data/titanic.csv",
                       Name = "character",
                       Ticket = "character",
                       Cabin = "character"))
-
 titanic$Survived <- revalue(titanic$Survived, c("0"="no", "1"="yes"))
-
-summary(titanic)
-
 kable(head(titanic, 6), digits=2)
 ```
 
 ## Figure 3.5 Mosaic plot for Titanic data: Gender vs. survival
 
-The ["Visualizing Categorical Data" package  (`vcd`)](https://cran.r-project.org/web/packages/vcd/vcd.pdf) package 
+The ["Visualizing Categorical Data" package  (`vcd`)](https://cran.r-project.org/web/packages/vcd/vcd.pdf)
 provides an excellent set of functions for exploring categorical data,
 including mosaic plots.
 
@@ -65,28 +69,32 @@ mosaic(
 
 ## Figure 3.6 Processed data
 
+First, we get rid of the variables that we do not want in our model.
+(`Cabin` might actually be useful, but it's not used here.)
+Then we use `is.na` to set missing age values to -1.
+The `mutate` and `select` functions make it easy to take square root of 
+the `Fare` variable and then drop it from the dataset.
+We then drop rows with missing `Embarked` data and remove the unused level 
+`""`. 
+Finally, we convert `factor` variables to dummy variables using the 
+`dummyVars` function in the `caret` package.
+To avoid perfect collinearity (a.k.a. the dummy variable trap), we set
+the `fullRank` parameter to `TRUE`.  `Survived.yes` is then converted back
+to a `factor` variable.
+
 ```{r figure3.6, cache=TRUE, dependson="figure3.4"}
-# First, we get rid of the variables that we do not want in our model
-# (Cabin might actually be useful, but it's not used.)
 titanicTidy <- subset(titanic, select = -c(PassengerId, Name, Ticket, Cabin))
 
-# Setting missing age values to -1
 titanicTidy$Age[is.na(titanicTidy$Age)] <- -1
 
-# Take square root of Fare and drop Fare
 titanicTidy <- titanicTidy %>%
   mutate(sqrtFare = sqrt(Fare)) %>%
   select(-Fare)
 
-# Drop rows with missing Embarked data and remove the unused level ""
 titanicTidy <- titanicTidy %>%
   filter(!(Embarked=="")) %>%
   droplevels
 
-str(titanicTidy)
-
-# Convert factors to dummy variables for ML models
-# The fullRank parameter is worth mentioning here. The general rule for creating dummy variables is to have one less variable than the number of categories present to avoid perfect collinearity (dummy variable trap). You basically want to avoid highly correlated variables but it also save space. If you have a factor column comprised of two levels ‘male’ and ‘female’, then you don’t need to transform it into two columns, instead, you pick one of the variables and you are either female, if its a 1, or male if its a 0. 
 dummies <- dummyVars(" ~ .", data = titanicTidy, fullRank = TRUE)
 titanicTidyNumeric <- data.frame(predict(dummies, newdata = titanicTidy))
 
@@ -96,25 +104,33 @@ kable(head(titanicTidyNumeric))
 
 ## Off-script: Feature plots and regression results
 
-```{r freaturePlots, fig.width=8, fig.height=8, cache=TRUE, dependson="figure3.6"}
+Figures 3.7-3.9 of the book illustrate results from analysis using linear 
+regression and a support vector machine classifier with a nonlinear kernel
+by plotting decision boundaries. We go "off-script" here and instead 
+demonstrate some useful visualization, modeling, and performance 
+measuring techniques available with the 
+[`caret`](http://topepo.github.io/caret/)
+and 
+[`AppliedPredictiveModeling`](https://cran.r-project.org/web/packages/AppliedPredictiveModeling/index.html) 
+packages.
+
+```{r featurePlots, fig.width=8, fig.height=8, cache=TRUE, dependson="figure3.6"}
 transparentTheme(trans = .2)
 
 featurePlot(x = titanicTidy[, c(2,3,4,5,6,7,8)], 
             y = titanicTidy$Survived, 
             plot = "pairs",
-            ## Add a key at the top
             auto.key = list(columns = 2))
 
 featurePlot(x = titanicTidy[, c(4,8)], 
             y = titanicTidy$Survived, 
             plot = "ellipse",
-            ## Add a key at the top
             auto.key = list(columns = 2))
 ```
 
-First, we make a 80/20% train/test split on the data. Notice that since we are
-going to be interested in predicting survival, we use the `Survived` factor
-variable in the `createDataPartition` function in order to preserve the
+As alluded to above, when we make a 80/20% train/test split, 
+we use the `Survived` factor
+variable in the `createDataPartition` function to preserve the
 overall class distribution of the data.
 
 ```{r split, cache=TRUE, dependson="figure3.6"}
@@ -125,6 +141,9 @@ trainIndex <- createDataPartition(titanicTidyNumeric$Survived, p = .8,
 titanicTrain <- titanicTidyNumeric[ trainIndex,]
 titanicTest  <- titanicTidyNumeric[-trainIndex,]
 ```
+
+Next we apply four different models to our data and print out the
+associated confusion matrix and statistics for each.
 
 ```{r logreg, warning=FALSE, cache=TRUE, dependson="split"}
 logregFit <- train(Survived.yes ~ ., data = titanicTrain,
@@ -167,6 +186,11 @@ confusionMatrix(data = gbmPred,
                 reference = titanicTest$Survived.yes)
 ```
 
+Given these models, we can explore their performance differences by collecting 
+the resampling results using `resamples` and 
+visualizing the resampling distributions with `bwplot`. More info can be
+found [here](http://topepo.github.io/caret/model-training-and-tuning.html#exploring-and-comparing-resampling-distributions).
+
 ```{r performance, cache=TRUE, dependson=c(-1,-2,-3,-4)}
 resamps <- resamples(list(GBM = gbmFit,
                           SVMLinear = svmFit,
@@ -189,11 +213,13 @@ bwplot(difValues, layout = c(2, 1))
 
 ## Figure 3.10 Four randomly chosen handwritten digits from the MNIST database
 
+Thanks to [Longhow Lam](https://longhowlam.wordpress.com/2015/11/25/a-little-h2o-deeplearning-experiment-on-the-mnist-data-set/)
+for posting the code used in the `displayMnistSamples` function that display's 
+digits from the MNIST dataset.
+
 ```{r figure3.10, cache=TRUE,fig.height=2}
-mnist <- read.csv("data/mnist_small.csv")
-mnist$label <- as.factor(mnist$label)
-# thanks to [Longhow Lam's post](https://longhowlam.wordpress.com/2015/11/25/a-little-h2o-deeplearning-experiment-on-the-mnist-data-set/), display the first 100 digits in the dataset
-par( mfrow = c(1,4), mai = c(0.05,0,0,0.05))
+mnist <- read.csv("data/mnist_small.csv",
+                  colClasses = c(label = "factor"))
 displayMnistSamples <- function(x) {
   for(i in x){
   y = as.matrix(mnist[i, 2:785])
@@ -208,7 +234,7 @@ displayMnistSamples(sample(1:length(mnist),4))
 
 ## Figure 3.11 Table of predicted probabilities from a k-nearest neighbors classifier, as applied to the MNIST dataset
 
-```{r figure 3.11, cache=TRUE, dependson="figure3.10"}
+```{r figure3.11, cache=TRUE, dependson="figure3.10"}
 trainIndex <- createDataPartition(mnist$label, p = .8, 
                                   list = FALSE, 
                                   times = 1)
@@ -218,16 +244,17 @@ mnistTest  <- mnist[-trainIndex,]
 mnist.kknn <- kknn(label~., mnistTrain, mnistTest, distance = 1,
                    kernel = "triangular")
 
-prob <- as.data.frame(mnist.kknn$prob[1:10,])
-mnistResultsDF <- data.frame(mnistTest$label[1:10],
-                             mnist.kknn$fit[1:10],
+confusionMatrix(fitted(mnist.kknn),mnistTest$label)
+
+rowsInTable <- 1:10
+prob <- as.data.frame(mnist.kknn$prob[rowsInTable,])
+mnistResultsDF <- data.frame(mnistTest$label[rowsInTable],
+                             mnist.kknn$fit[rowsInTable],
                              prob)
 
-confusionMatrix(fitted(mnist.kknn),mnistTest$label)
 
 kable(mnistResultsDF, digits=2,
       col.names=c("actual","fit",0:9))
-
 ```
 
 ## Figure 3.13 Small subset of the Auto MPG data
@@ -240,7 +267,6 @@ auto <- read.csv("data/auto-mpg.csv",
 auto$origin <- revalue(auto$origin, 
                        c("1\t"="USA", "2\t"="Europe", "3\t"="Asia"))
 
-str(auto)
 kable(head(auto,5))
 ```
 
@@ -289,10 +315,11 @@ lmFit <- train(mpg ~ ., data = autoTrain,
                method = "lm")
 lmPred <- predict(lmFit, newdata = autoTest)
 
-kable(data.frame("Origin.Europe" = autoTest$origin.Europe[1:5],
-                 "Origin.Asia" = autoTest$origin.Asia[1:5],
-                 "MPG" = autoTest$mpg[1:5],
-                 "Predicted MPG" = lmPred[1:5]))
+rowsInTable <- 1:5
+kable(data.frame("Origin.Europe" = autoTest$origin.Europe[rowsInTable],
+                 "Origin.Asia" = autoTest$origin.Asia[rowsInTable],
+                 "MPG" = autoTest$mpg[rowsInTable],
+                 "Predicted MPG" = lmPred[rowsInTable]))
 ```
 
 ## Figure 3.17 A scatter plot of the actual versus predicted values on the held-out test set. The diagonal line shows the perfect regressor. The closer all of the predictions are to this line, the better the model.
@@ -311,10 +338,11 @@ rfFit <- train(mpg ~ ., data = autoTrain,
                method = "rf")
 rfPred <- predict(rfFit, newdata = autoTest)
 
-kable(data.frame("Origin.Europe" = autoTest$origin.Europe[1:5],
-                 "Origin.Asia" = autoTest$origin.Asia[1:5],
-                 "MPG" = autoTest$mpg[1:5],
-                 "Predicted MPG" = rfPred[1:5]))
+kable(data.frame("Origin.Europe" = autoTest$origin.Europe[rowsInTable],
+                 "Origin.Asia" = autoTest$origin.Asia[rowsInTable],
+                 "MPG" = autoTest$mpg[rowsInTable],
+                 "Predicted MPG" = rfPred[rowsInTable]))
+
 ```
 
 ## Figure 3.19 Comparison of MPG data versus predicted values for the nonlinear random forest regression model
