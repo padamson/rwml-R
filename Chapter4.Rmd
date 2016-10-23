@@ -1,7 +1,7 @@
 ---
 title: "Real-World Machine Learning (with R): Chapter 4"
 author: "Paul Adamson"
-date: "October 15, 2016"
+date: "October 23, 2016"
 output: html_document
 ---
 
@@ -17,19 +17,15 @@ knitr::opts_chunk$set(echo = TRUE)
 setwd("~/analytics/real-world-machine-learning-R/")
 library(plyr)
 library(dplyr)
-#library(vcd)
 library(AppliedPredictiveModeling)
 library(caret)
-#library(ellipse)
 library(kknn)
 library(RColorBrewer)
 library(cowplot)
 library(reshape2)
 library(ROCR)
-#library(pROC)
-#library(gridExtra)
-#library(grid)
-#library(randomForest)
+library(kernlab)
+library(doMC)
 set.seed(1234)
 .pardefault <- par()
 ```
@@ -69,7 +65,9 @@ Finally, we convert `factor` variables to dummy variables using the
 `dummyVars` function in the `caret` package.
 To avoid perfect collinearity (a.k.a. the dummy variable trap), we set
 the `fullRank` parameter to `TRUE`.  `Survived.yes` is then converted back
-to a `factor` variable.
+to a `factor` variable, and its levels are changed back to 'yes' and 'no' again
+(otherwise the `train` function in `caret` will complain later about
+invalid R variable names).
 
 We then make a 80/20% train/test split 
 using the `Survived` factor
@@ -93,8 +91,10 @@ dummies <- dummyVars(" ~ .", data = titanicTidy, fullRank = TRUE)
 titanicTidyNumeric <- data.frame(predict(dummies, newdata = titanicTidy))
 
 titanicTidyNumeric$Survived.yes <- factor(titanicTidyNumeric$Survived.yes)
+titanicTidyNumeric$Survived.yes <- 
+  revalue(titanicTidyNumeric$Survived.yes, c("0"="no", "1"="yes"))
 
-trainIndex <- createDataPartition(titanicTidyNumeric$Survived, p = .8, 
+trainIndex <- createDataPartition(titanicTidyNumeric$Survived.yes, p = .8, 
                                   list = FALSE, 
                                   times = 1)
 
@@ -273,4 +273,61 @@ ggplot(data=autoTest, aes(x=mpg, y=residuals)) +
   geom_point() + 
   geom_abline(slope = 0, intercept = 0) +
   labs(x="MPG", y="Residuals")
+```
+
+## Listing 4.7 Grid search with kernel SVM (and collection of line graphs as analog to contour plot of Figure 4.25)
+
+The `getModelInfo` function in the `caret` package can be used to find
+the available model parameters. By setting `summaryFunction = twoClassSummary`
+in `trainControl`, we request `ROC` to be used to select the optimal model using 
+the largest value.
+
+```{r listing4.7, cache=TRUE, dependson="figure4.10"}
+registerDoMC(cores = 2)
+svmRadialModelInfo <- getModelInfo("svmRadial")
+svmRadialModelInfo$svmRadial$parameters
+
+svmGrid <- expand.grid(sigma = c(1:10 %o% 10^(-1:0)),
+                       C = 1:10)
+
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           savePredictions = TRUE,
+                           summaryFunction=twoClassSummary, 
+                           classProbs=TRUE)
+
+svmFit <- train(Survived.yes ~ ., data = titanicTrain,
+                method = "svmRadial", 
+                trControl = fitControl, 
+                verbose = FALSE, 
+                tuneGrid = svmGrid)
+
+trellis.par.set(caretTheme())
+plot(svmFit)
+
+svmFit$bestTune
+```
+
+
+```{r listing4.7b, cache=TRUE, dependson="listing4.7"}
+svmGrid <- expand.grid(sigma = c(1:10 %o% 10^(-2:-1)),
+                       C = seq(0, 20, by = 2))
+
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           savePredictions = TRUE,
+                           summaryFunction=twoClassSummary, 
+                           classProbs=TRUE)
+
+svmFit <- train(Survived.yes ~ ., data = titanicTrain,
+                method = "svmRadial", 
+                trControl = fitControl, 
+                verbose = FALSE, 
+                tuneGrid = svmGrid)
+
+trellis.par.set(caretTheme())
+plot(svmFit)
+
+svmFit$bestTune
+
 ```
