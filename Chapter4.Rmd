@@ -165,7 +165,7 @@ ggdraw(switch_axis_position(confusionPlot, axis = 'x'))
 
 ## Figure 4.20 The ROC curves for each class of the MNIST 10-class classifier
 
-```{r figure4.20, cache=TRUE, dependson="figure"}
+```{r figure4.20, cache=TRUE, dependson="figure4.19", fig.height=6, fig.width=6}
 
 mnistResultsDF <- data.frame(actual = mnistTest$label,
                              fit = mnist.kknn$fit,
@@ -173,7 +173,6 @@ mnistResultsDF <- data.frame(actual = mnistTest$label,
 
 plotROCs <- function(df, digitList) {
   firstPlot <- TRUE
-  aucList <- NULL
   legendList <- NULL
   for (digit in digitList) {
     dfDigit <- df %>%
@@ -203,4 +202,75 @@ plotROCs <- function(df, digitList) {
 
 plotROCs(mnistResultsDF, 0:9)
 
+```
+
+## Figure 4.21 A subset of the Auto MPG dataset
+
+```{r figure4.21, cache=TRUE}
+auto <- read.csv("data/auto-mpg.csv",
+                 colClasses = c(
+                      origin = "factor"))
+
+auto$origin <- revalue(auto$origin, 
+                       c("1\t"="USA", "2\t"="Europe", "3\t"="Asia"))
+
+kable(head(auto,5))
+```
+
+## Figure 4.22 Scatter plot of the predicted MPG versus actual values from the testing set. The diagonal line shows the optimal model.
+
+```{r figure4.22, cache=TRUE, dependson="figure4.21", fig.height=4}
+dummies <- dummyVars(" ~ .", data = auto, fullRank = TRUE)
+autoNumeric <- data.frame(predict(dummies, newdata = auto))
+
+kable(tail(autoNumeric,5))
+
+trainIndex <- createDataPartition(autoNumeric$mpg, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+autoTrain <- autoNumeric[ trainIndex,]
+autoTest  <- autoNumeric[-trainIndex,]
+
+ctrl <- trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+
+auto.glm <- train(mpg ~.,  
+                 data=autoTrain, 
+                 method="glm", 
+                 trControl = ctrl, 
+                 tuneLength = 5)
+
+auto.glm.Pred = predict(auto.glm, newdata=autoTest)
+
+ggplot(autoTest, aes(x=mpg, y=auto.glm.Pred)) + 
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0) +
+  labs(x="MPG", y="Predicted MPG")
+```
+
+## Listing 4.5 The root-mean-square error
+
+The `RMSE` function is part of the `caret` package.
+
+```{r listing4.5, cache=TRUE, dependson="figure4.22"}
+RMSE(auto.glm.Pred, autoTest$mpg)
+```
+
+## Listing 4.6 The R-squared calculation
+
+The `R2` function is part of the `caret` package.
+
+```{r listing4.6, cache=TRUE, dependson="figure4.22"}
+R2(auto.glm.Pred, autoTest$mpg)
+```
+
+## Figure 4.24 The residual plot from predictions on the MPG dataset.
+
+```{r figure4.24, cache=TRUE, dependson="figure4.22", fig.height=4}
+autoTest$residuals <- autoTest$mpg - auto.glm.Pred
+
+ggplot(data=autoTest, aes(x=mpg, y=residuals)) +
+  geom_point() + 
+  geom_abline(slope = 0, intercept = 0) +
+  labs(x="MPG", y="Residuals")
 ```
