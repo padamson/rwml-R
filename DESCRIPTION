@@ -1,0 +1,30 @@
+Package: rwml-R
+Title: R Code for Real World Machine Learning
+Version: 0.1
+Authors@R: person("Paul", "Adamson", email = "paul.adamson.01@gmail.com",
+      role = c("aut", "cre"))
+Description: Provided R code for book Real World Machine Learning
+Depends: R (>= 3.1.0)
+License: MIT 
+LazyData: true
+Imports:
+  knitr,
+  plyr,
+  dplyr,
+  tidyr,
+  ggplot2,
+  vcd,
+  sm,
+  AppliedPredictiveModeling,
+  caret,
+  ellipse,
+  kknn,
+  gridExtra,
+  grid,
+  randomForest,
+  RColorBrewer,
+  cowplot,
+  reshape2,
+  ROCR,
+  kernlab,
+  doMC,
