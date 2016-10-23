@@ -24,11 +24,13 @@ library(caret)
 library(kknn)
 library(RColorBrewer)
 library(cowplot)
-library(pROC)
+library(reshape2)
+library(ROCR)
+#library(pROC)
 #library(gridExtra)
 #library(grid)
 #library(randomForest)
-set.seed(3456)
+set.seed(1234)
 .pardefault <- par()
 ```
 
@@ -164,8 +166,41 @@ ggdraw(switch_axis_position(confusionPlot, axis = 'x'))
 ## Figure 4.20 The ROC curves for each class of the MNIST 10-class classifier
 
 ```{r figure4.20, cache=TRUE, dependson="figure"}
-#mnist.kknn$prob
-#roc(mnist.kknn$prob)
-#ggplot(mnist.kknn)
-```
 
+mnistResultsDF <- data.frame(actual = mnistTest$label,
+                             fit = mnist.kknn$fit,
+                             as.data.frame(mnist.kknn$prob))
+
+plotROCs <- function(df, digitList) {
+  firstPlot <- TRUE
+  aucList <- NULL
+  legendList <- NULL
+  for (digit in digitList) {
+    dfDigit <- df %>%
+      filter(as.character(actual) == as.character(digit) |
+               as.character(fit) == as.character(digit))  %>%
+      mutate(prediction = (as.character(actual) == as.character(fit)))
+    
+    pred <- prediction(dfDigit[,digit+3], dfDigit$prediction)
+    perf <- performance(pred, "tpr", "fpr")
+    auc <- performance(pred, "auc")
+    legendList <- append(legendList, 
+                         paste0("Digit: ",digit,", AUC: ",
+                                round(auc@y.values[[1]], digits = 4)))
+    if (firstPlot == TRUE) {
+      plot(perf, colorize = FALSE, lty = digit+1, col = digit+1)
+      firstPlot <- FALSE  
+    } else {
+      plot(perf, colorize = FALSE, add = TRUE, lty = digit+1, col = digit+1)
+    }
+  }
+  legend(x=0.4, y=0.6,
+         legend = legendList,
+         col = 1:10,
+         lty = 1:10,
+         bty = "n")
+}
+
+plotROCs(mnistResultsDF, 0:9)
+
+```
