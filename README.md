@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.org/padamson/rwml-R.svg?branch=master)](https://travis-ci.org/padamson/rwml-R)
-
 # R code to accompany Real-World Machine Learning
 
 Provides R code to accompany the book "Real-World Machine Learning" as
