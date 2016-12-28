@@ -1,20 +1,21 @@
 ---
-title: "Real-World Machine Learning (with R): Chapter 3"
+title: "Real-World Machine Learning" 
+subtitle: "Chapter 3"
 author: "Paul Adamson"
-date: "October 15, 2016"
+date: "December 7, 2016"
 output: html_document
 ---
 
-This notebook contains R code to accompany Chapter 3 of the book 
+This file contains R code to accompany Chapter 3 of the book 
 ["Real-World Machine Learning"](https://www.manning.com/books/real-world-machine-learning),
-by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  It is part of a 
-series of R Markdown notebooks hosted on GitHub in the 
-[rwml-R repo](https://github.com/padamson/rwml-R).
+by Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  The code was contributed by
+[Paul Adamson](http://github.com/padamson). 
+
+*NOTE: working directory should be set to this file's location.*
 
 ```{r setup, include=FALSE}
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
-setwd("~/analytics/real-world-machine-learning-R/")
 library(plyr)
 library(dplyr)
 library(vcd)
@@ -38,7 +39,7 @@ levels for the `factor` variable. The `kable` function is built into the `knitr`
 package.
 
 ```{r figure3.4, cache=TRUE}
-titanic <- read.csv("data/titanic.csv", 
+titanic <- read.csv("../data/titanic.csv", 
                     colClasses = c(
                       Survived = "factor",
                       Name = "character",
@@ -102,115 +103,6 @@ titanicTidyNumeric$Survived.yes <- factor(titanicTidyNumeric$Survived.yes)
 kable(head(titanicTidyNumeric))
 ```
 
-## Off-script: Feature plots and regression results
-
-Figures 3.7-3.9 of the book illustrate results from analysis using linear 
-regression and a support vector machine classifier with a nonlinear kernel
-by plotting decision boundaries. We go "off-script" here and instead 
-demonstrate some useful visualization, modeling, and performance 
-measuring techniques available with the 
-[`caret`](http://topepo.github.io/caret/)
-and 
-[`AppliedPredictiveModeling`](https://cran.r-project.org/web/packages/AppliedPredictiveModeling/index.html) 
-packages.
-
-```{r featurePlots, fig.width=8, fig.height=8, cache=TRUE, dependson="figure3.6"}
-transparentTheme(trans = .2)
-
-featurePlot(x = titanicTidy[, c(2,3,4,5,6,7,8)], 
-            y = titanicTidy$Survived, 
-            plot = "pairs",
-            auto.key = list(columns = 2))
-
-featurePlot(x = titanicTidy[, c(4,8)], 
-            y = titanicTidy$Survived, 
-            plot = "ellipse",
-            auto.key = list(columns = 2))
-```
-
-As alluded to above, when we make a 80/20% train/test split, 
-we use the `Survived` factor
-variable in the `createDataPartition` function to preserve the
-overall class distribution of the data.
-
-```{r split, cache=TRUE, dependson="figure3.6"}
-trainIndex <- createDataPartition(titanicTidyNumeric$Survived, p = .8, 
-                                  list = FALSE, 
-                                  times = 1)
-
-titanicTrain <- titanicTidyNumeric[ trainIndex,]
-titanicTest  <- titanicTidyNumeric[-trainIndex,]
-```
-
-Next we apply four different models to our data and print out the
-associated confusion matrix and statistics for each.
-
-```{r logreg, warning=FALSE, cache=TRUE, dependson="split"}
-logregFit <- train(Survived.yes ~ ., data = titanicTrain,
-                   method = "LogitBoost")
-logregPred <- predict(logregFit, newdata = titanicTest)
-
-confusionMatrix(data = logregPred,
-                reference = titanicTest$Survived.yes)
-
-```
-
-
-```{r svm, warning=FALSE, cache=TRUE, dependson="split"}
-svmFit <- train(Survived.yes ~., data = titanicTrain,
-                method = "svmLinear")
-svmPred <- predict(svmFit, newdata = titanicTest)
-
-confusionMatrix(data = svmPred,
-                reference = titanicTest$Survived.yes)
-```
-
-```{r svm2, warning=FALSE, cache=TRUE, dependson="split"}
-
-svmFit2 <- train(Survived.yes ~., data = titanicTrain,
-                 method = "svmPoly")
-svmPred2 <- predict(svmFit2, newdata = titanicTest)
-
-confusionMatrix(data = svmPred2,
-                reference = titanicTest$Survived.yes)
-```
-
-```{r gbm, warning=FALSE, cache=TRUE, dependson="split"}
-gbmFit <- train(Survived.yes ~ ., data = titanicTrain, 
-                 method = "gbm", 
-                 verbose = FALSE)
-
-gbmPred <- predict(gbmFit, newdata = titanicTest)
-
-confusionMatrix(data = gbmPred, 
-                reference = titanicTest$Survived.yes)
-```
-
-Given these models, we can explore their performance differences by collecting 
-the resampling results using `resamples` and 
-visualizing the resampling distributions with `bwplot`. More info can be
-found [here](http://topepo.github.io/caret/model-training-and-tuning.html#exploring-and-comparing-resampling-distributions).
-
-```{r performance, cache=TRUE, dependson=c(-1,-2,-3,-4)}
-resamps <- resamples(list(GBM = gbmFit,
-                          SVMLinear = svmFit,
-                          SVMPoly = svmFit2,
-                          LOGREG = logregFit))
-resamps
-
-summary(resamps)
-
-bwplot(resamps, layout = c(2, 1))
-
-difValues <- diff(resamps)
-
-difValues
-
-summary(difValues)
-
-bwplot(difValues, layout = c(2, 1))
-```
-
 ## Figure 3.10 Four randomly chosen handwritten digits from the MNIST database
 
 Thanks to [Longhow Lam](https://longhowlam.wordpress.com/2015/11/25/a-little-h2o-deeplearning-experiment-on-the-mnist-data-set/)
@@ -218,7 +110,7 @@ for posting the code used in the `displayMnistSamples` function that display's
 digits from the MNIST dataset.
 
 ```{r figure3.10, cache=TRUE,fig.height=2}
-mnist <- read.csv("data/mnist_small.csv",
+mnist <- read.csv("../data/mnist_small.csv",
                   colClasses = c(label = "factor"))
 displayMnistSamples <- function(x) {
   for(i in x){
@@ -260,7 +152,7 @@ kable(mnistResultsDF, digits=2,
 ## Figure 3.13 Small subset of the Auto MPG data
 
 ```{r figure3.13, cache=TRUE}
-auto <- read.csv("data/auto-mpg.csv",
+auto <- read.csv("../data/auto-mpg.csv",
                  colClasses = c(
                       origin = "factor"))
 

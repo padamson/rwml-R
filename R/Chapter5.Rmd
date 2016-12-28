@@ -1,0 +1,95 @@
+---
+title: 'Real-World Machine Learning (with R): Chapter 5'
+author: "Paul Adamson"
+date: "November 11, 2016"
+output: html_document
+---
+
+This notebook contains R code to accompany Chapter 5 of the book 
+["Real-World Machine Learning"](https://www.manning.com/books/real-world-machine-learning),
+by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  It is part of a 
+series of R Markdown notebooks hosted on GitHub in the 
+[rwml-R repo](https://github.com/padamson/rwml-R).
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(bit64)
+library(dplyr)
+library(caret)
+workDir <- "/Users/padamson/analytics/real-world-machine-learning-R/"
+```
+
+### Data
+
+The data for the examples in this chapter are from the
+[Kaggle Event Recommendation Engine Challenge](https://www.kaggle.com/c/event-recommendation-engine-challenge).
+The rules of the challenge prohibit redristribution of the data. 
+Login to [Kaggle](https://www.kaggle.com), download the data, and put
+the `train.csv`, `events.csv`, and `users.csv` files in a folder 
+named `./proprietary_data/`.
+
+### Figure 5.2 A sample of the datasets used for training the event-recommendations model
+
+```{r loadData, cache=TRUE, dependson="setup"}
+dataDir <- "proprietary_data"
+# join on user and event identifiers
+#from users data, get user_id, birthyear, gender, timezone
+users <- read.csv(file.path(dataDir, "users.csv"),
+                  colClasses = c('integer64', 
+                                 "NULL", 
+                                 "integer",
+                                 "factor",
+                                 "NULL",
+                                 "NULL",
+                                 "integer"),
+                  na.strings = c("16-Mar", "23-May", "NA", "None"))
+
+# from events data, get event_id, lat, lng
+# note don't get confused about the user_id in this dataset. it is the user that created the event and is different from the user_id in the train dataset
+events <- fread(file.path(dataDir, "events.csv"),
+                sep=",",
+                colClasses = c("integer64",
+                               rep("NULL",6),
+                               "numeric",
+                               "numeric",
+                               rep("NULL",101)))
+
+str(events)
+
+# from train data, get user, event, invited, interested, not_interested 
+# rename user to user_id and event to event_id to match users and events datasets
+# also need to drop observations without explicit interested or not_interested selection
+# then drop not_interested since we only need one of the categorical variables
+train <- read.csv(file.path(dataDir, "train.csv"),
+                  colClasses = c("integer64",
+                                 "integer64",
+                                 "integer",
+                                 "NULL",
+                                 "integer",
+                                 "integer"),
+                  col.names = c("user_id",
+                                "event_id",
+                                "invited",
+                                "NULL",
+                                "interested",
+                                "not_interested")) %>%
+  subset(interested == 1 | not_interested == 1) %>%
+  select(-not_interested)
+```
+
+```{r figure5.2, cache=TRUE, dependson="loadData"}
+train.joined <- inner_join(train, users, by=c("user_id")) %>%
+  inner_join(events, by=c("event_id")) %>%
+  select(-c(user_id,event_id))
+kable(head(train.joined,7))
+```
+
+## Figure 5.3 Cross-validated ROC curve and AUC metric for the simple event- recommendation model
+```{r figure5.3, cache=TRUE, dependson="figure5.2"}
+dummies <- dummyVars(" ~ .", data = train.joined, fullRank = TRUE, 
+                     levelsOnly = TRUE)
+train.joined.numeric <- data.frame(predict(dummies, newdata = train.joined))
+kable(head(train.joined.numeric,7))
+```
