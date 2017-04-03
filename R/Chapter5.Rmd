@@ -1,15 +1,17 @@
 ---
-title: 'Real-World Machine Learning (with R): Chapter 5'
+title: "Real-World Machine Learning"
+subtitle: "Chapter 5"
 author: "Paul Adamson"
-date: "November 11, 2016"
+date: "April 2, 2017"
 output: html_document
 ---
 
 This notebook contains R code to accompany Chapter 5 of the book 
 ["Real-World Machine Learning"](https://www.manning.com/books/real-world-machine-learning),
-by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  It is part of a 
-series of R Markdown notebooks hosted on GitHub in the 
-[rwml-R repo](https://github.com/padamson/rwml-R).
+by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  The code was 
+contributed by [Paul Adamson](http://github.com/padamson). 
+
+*NOTE: working directory should be set to this file's location.*
 
 ```{r setup, include=FALSE}
 library(knitr)
@@ -17,23 +19,25 @@ knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(bit64)
 library(dplyr)
+library(plyr)
 library(caret)
-workDir <- "/Users/padamson/analytics/real-world-machine-learning-R/"
+library(randomForest)
+library(rhandsontable)
 ```
 
-### Data
+### Data for event-recommendation model
 
-The data for the examples in this chapter are from the
+The data for the examples from this chapter are available at the
 [Kaggle Event Recommendation Engine Challenge](https://www.kaggle.com/c/event-recommendation-engine-challenge).
 The rules of the challenge prohibit redristribution of the data. 
-Login to [Kaggle](https://www.kaggle.com), download the data, and put
-the `train.csv`, `events.csv`, and `users.csv` files in a folder 
-named `./proprietary_data/`.
+To run the example code, login to [Kaggle](https://www.kaggle.com), 
+download the data, and put the `train.csv`, `events.csv`, and `users.csv` 
+files in a folder named `../proprietary_data/`.
 
 ### Figure 5.2 A sample of the datasets used for training the event-recommendations model
 
-```{r loadData, cache=TRUE, dependson="setup"}
-dataDir <- "proprietary_data"
+```{r loadEventData, cache=TRUE}
+dataDir <- "../proprietary_data"
 # join on user and event identifiers
 #from users data, get user_id, birthyear, gender, timezone
 users <- read.csv(file.path(dataDir, "users.csv"),
@@ -56,8 +60,6 @@ events <- fread(file.path(dataDir, "events.csv"),
                                "numeric",
                                rep("NULL",101)))
 
-str(events)
-
 # from train data, get user, event, invited, interested, not_interested 
 # rename user to user_id and event to event_id to match users and events datasets
 # also need to drop observations without explicit interested or not_interested selection
@@ -79,7 +81,7 @@ train <- read.csv(file.path(dataDir, "train.csv"),
   select(-not_interested)
 ```
 
-```{r figure5.2, cache=TRUE, dependson="loadData"}
+```{r figure5.2, cache=TRUE, dependson="loadEventData"}
 train.joined <- inner_join(train, users, by=c("user_id")) %>%
   inner_join(events, by=c("event_id")) %>%
   select(-c(user_id,event_id))
@@ -87,9 +89,294 @@ kable(head(train.joined,7))
 ```
 
 ## Figure 5.3 Cross-validated ROC curve and AUC metric for the simple event- recommendation model
-```{r figure5.3, cache=TRUE, dependson="figure5.2"}
+```{r figure5.3_dummyvars, cache=TRUE, dependson="figure5.2"}
 dummies <- dummyVars(" ~ .", data = train.joined, fullRank = TRUE, 
                      levelsOnly = TRUE)
-train.joined.numeric <- data.frame(predict(dummies, newdata = train.joined))
-kable(head(train.joined.numeric,7))
+train.joined.numeric <- data.frame(predict(dummies, newdata = train.joined)) %>%
+  select(c(-female)) %>%
+  na.omit()
+train.joined.numeric$interested <- factor(train.joined.numeric$interested)
+train.joined.numeric$interested <- 
+  revalue(train.joined.numeric$interested, c("0" = "no", "1" = "yes"))
+```
+
+
+```{r listing4.3, eval=TRUE, cache=TRUE}
+# Returns the false-positive and true-positive rates at nPoints thresholds for 
+# the given true and predicted labels
+# trueLabels: 0=FALSE; 1=TRUE
+rocCurve <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
+  # Allocates the threshold and ROC lists
+  thr <- seq(0,1,length=nPoints)
+  tpr <- numeric(nPoints)
+  fpr <- numeric(nPoints)
+  
+  # Precalculates values for the positive and negative cases, used in the loop
+  pos <- trueLabels == posClass
+  neg <- !pos 
+  nPos <- sum(pos, na.rm=TRUE)
+  nNeg <- sum(neg, na.rm=TRUE)
+  
+  # For each threshold, calculates the rate of true and false positives
+  for (i in 2:length(thr)) {
+    t <- thr[i]
+    meetOrExceedThreshold <- predictedProbs >= t
+    tpr[i] <-  sum((meetOrExceedThreshold & pos), na.rm=TRUE) / nPos
+    fpr[i] <-  sum((meetOrExceedThreshold & neg), na.rm=TRUE) / nNeg
+  }
+  
+  # Create data frame without duplicated fpr's to return
+  duplicatedFPRs <- duplicated(fpr)
+  df <- data.frame(fpr=fpr[!duplicatedFPRs],tpr=tpr[!duplicatedFPRs],thr=thr[!duplicatedFPRs])
+  
+  return(df)
+}
+```
+
+```{r plotROC, eval=TRUE, cache=TRUE, dependson="listing4.3"}
+plotROC <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
+  auc <- 0
+  df <- rocCurve(trueLabels = trueLabels,
+                 predictedProbs = predictedProbs,
+                 nPoints = nPoints,
+                 posClass = posClass)
+  
+  idx <- 3:length(df$fpr)
+  auc <- as.double( 
+    (df$fpr[idx-1] - df$fpr[idx]) %*% (df$tpr[idx] + df$tpr[idx-1]) ) / 2.0 
+  
+  ggplot(df,aes(x=fpr,y=tpr)) +
+  geom_step(direction="vh") +
+  scale_x_continuous(limits = c(0,1)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(x = "False-positive rate",
+       y = "True-positive rate") +
+  annotate("text", x=.5,y=.5,label=paste0("Area under the curve: ",round(auc,digits = 2)))
+  
+}
+```
+
+
+```{r figure5.3_data, cache=TRUE, dependson="figure5.3_dummyvars"}
+trainIndex <- createDataPartition(train.joined.numeric$male, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+eventTrain <- train.joined.numeric[ trainIndex,]
+eventTest  <- train.joined.numeric[-trainIndex,]
+
+
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           savePredictions = TRUE,
+                           summaryFunction=twoClassSummary, 
+                           classProbs=TRUE)
+
+rfFit <- train(interested ~ ., data = eventTrain,
+                method = "rf", 
+                trControl = fitControl, 
+                verbose = FALSE)
+
+event.rf.pred.prob <- predict(object=rfFit, 
+                              eventTest, type='prob')
+```
+
+```{r figure5.3, cache=TRUE, dependson=c("figure5.3_data","plotROC")}
+plotROC(revalue(eventTest$interested, c("no" = 0, "yes" = 1)),
+        event.rf.pred.prob$yes, nPoints = 1000)
+```
+
+##  Figure 5.4 Additional date-time columns extracted from the timestamp column for the event-recommendation dataset
+```{r figure5.4, cache=TRUE, dependson="loadEventData"}
+# from events data, get event_id, start_time, lat, lng
+# note don't get confused about the user_id in this dataset. it is the user that created the event and is different from the user_id in the train dataset
+# also, doing a semi_join so we only work with the event data in the train data
+# frame
+
+events <- fread(file.path(dataDir, "events.csv"),
+                sep=",",
+                colClasses = c("integer64",
+                               "NULL",
+                               'myDateTime',
+                               rep("NULL",4),
+                               "numeric",
+                               "numeric",
+                               rep("NULL",101))) %>%
+  semi_join(y = train) %>%
+  mutate(datetime = strptime(start_time, format="%Y-%m-%dT%H:%M:%OS", tz="UTC"),
+         datetime_year = as.numeric(substr(datetime, 1, 4)), 
+         datetime_month_of_year = as.numeric(substr(datetime, 6, 7)), 
+         datetime_day_of_month = as.numeric(substr(datetime, 9,10)), 
+         datetime_hour_of_day = as.numeric(substr(datetime, 12, 13)), 
+         datetime_minute_of_hour = as.numeric(substr(datetime, 15, 16)),
+         datetime_second_of_minute = as.numeric(substr(datetime, 18, 19)),
+         datetime_day_of_week = as.factor(weekdays(datetime)),
+         datetime_week_of_year = week(datetime),
+         datetime_quarter_of_year = quarter(datetime),
+         datetime_day_of_year = as.POSIXlt(datetime)$yday
+  ) %>%
+  select(c(-datetime, -start_time))
+
+kable(head(
+  select(events,
+         c(datetime_hour_of_day, 
+           datetime_day_of_week,
+           datetime_day_of_month,
+           datetime_day_of_year,
+           datetime_month_of_year)),
+  5))
+
+kable(head(
+  select(events,
+         c(datetime_minute_of_hour,
+           datetime_second_of_minute,
+           datetime_year,
+           datetime_quarter_of_year,
+           datetime_week_of_year)), 
+  5))
+```
+
+## Figure 5.5 Cross-validated ROC curve for model including date-time features
+
+```{r figure5.5_data, cache=TRUE, dependson=c("figure5.4","plotROC")}
+train.joined <- inner_join(train, users, by=c("user_id")) %>%
+  inner_join(events, by=c("event_id")) %>%
+  select(-c(user_id,event_id))
+
+dummies <- dummyVars(" ~ .", data = train.joined, fullRank = TRUE, 
+                     levelsOnly = TRUE)
+train.joined.numeric <- data.frame(predict(dummies, newdata = train.joined)) %>%
+  select(c(-female)) %>%
+  na.omit()
+train.joined.numeric$interested <- factor(train.joined.numeric$interested)
+train.joined.numeric$interested <- 
+  revalue(train.joined.numeric$interested, c("0" = "no", "1" = "yes"))
+
+trainIndex <- createDataPartition(train.joined.numeric$male, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+eventTrain <- train.joined.numeric[ trainIndex,]
+eventTest  <- train.joined.numeric[-trainIndex,]
+
+
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           savePredictions = TRUE,
+                           summaryFunction=twoClassSummary, 
+                           classProbs=TRUE)
+
+rfFit <- train(interested ~ ., data = eventTrain,
+                method = "rf", 
+                trControl = fitControl, 
+                verbose = FALSE)
+
+event.rf.pred.prob <- predict(object=rfFit, 
+                              eventTest, type='prob')
+```
+
+```{r figure5.5, cache=TRUE, dependson=c("figure5.5_data","plotROC")}
+plotROC(revalue(eventTest$interested, c("no" = 0, "yes" = 1)),
+        event.rf.pred.prob$yes, nPoints = 1000)
+```
+
+
+##  Figure 5.6 A slice of the bag-of-words data for the event-recommendation example. These numbers are the counts of the top-occurring words in the event descriptions. A large fraction of the cells contain 0, so we call the dataset sparse.
+```{r figure5.6_data, cache=TRUE, dependson="loadEventData"}
+# from events data, get event_id, start_time, lat, lng, c_1 through c_other
+# note don't get confused about the user_id in this dataset. it is the user that created the event and is different from the user_id in the train dataset
+# also, doing a semi_join so we only work with the event data in the train data
+# frame
+
+events <- fread(file.path(dataDir, "events.csv"),
+                sep=",",
+                colClasses = c("integer64",
+                               "NULL",
+                               'myDateTime',
+                               rep("NULL",4),
+                               "numeric",
+                               "numeric",
+                               rep("integer",101))) %>%
+  semi_join(y = train) %>%
+  mutate(datetime = strptime(start_time, format="%Y-%m-%dT%H:%M:%OS", tz="UTC"),
+         datetime_year = as.numeric(substr(datetime, 1, 4)), 
+         datetime_month_of_year = as.numeric(substr(datetime, 6, 7)), 
+         datetime_day_of_month = as.numeric(substr(datetime, 9,10)), 
+         datetime_hour_of_day = as.numeric(substr(datetime, 12, 13)), 
+         datetime_minute_of_hour = as.numeric(substr(datetime, 15, 16)),
+         datetime_second_of_minute = as.numeric(substr(datetime, 18, 19)),
+         datetime_day_of_week = as.factor(weekdays(datetime)),
+         datetime_week_of_year = week(datetime),
+         datetime_quarter_of_year = quarter(datetime),
+         datetime_day_of_year = as.POSIXlt(datetime)$yday
+  ) %>%
+  select(c(-datetime, -start_time))
+```
+
+```{r figure5.6, cache=TRUE, dependson="figure5.6_data"}
+rhandsontable(matrix(data=unlist(events[1:110,4:104]),nrow=11,ncol=10),
+              readOnly = TRUE)
+```
+
+## Figure 5.7 Cross-validated ROC curve for full model including date-time and text features
+```{r figure5.7_data, cache=TRUE, dependson="figure5.6_data"}
+train.joined <- inner_join(train, users, by=c("user_id")) %>%
+  inner_join(events, by=c("event_id")) %>%
+  select(-c(user_id,event_id))
+
+dummies <- dummyVars(" ~ .", data = train.joined, fullRank = TRUE, 
+                     levelsOnly = TRUE)
+train.joined.numeric <- data.frame(predict(dummies, newdata = train.joined)) %>%
+  select(c(-female)) %>%
+  na.omit()
+train.joined.numeric$interested <- factor(train.joined.numeric$interested)
+train.joined.numeric$interested <- 
+  revalue(train.joined.numeric$interested, c("0" = "no", "1" = "yes"))
+
+trainIndex <- createDataPartition(train.joined.numeric$male, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+eventTrain <- train.joined.numeric[ trainIndex,]
+eventTest  <- train.joined.numeric[-trainIndex,]
+
+
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           savePredictions = TRUE,
+                           summaryFunction=twoClassSummary, 
+                           classProbs=TRUE)
+
+rfFit <- train(interested ~ ., data = eventTrain,
+                method = "rf", 
+                trControl = fitControl, 
+                verbose = FALSE)
+
+event.rf.pred.prob <- predict(object=rfFit, 
+                              eventTest, type='prob')
+```
+
+```{r figure5.7, cache=TRUE, dependson=c("figure5.7_data","plotROC")}
+plotROC(revalue(eventTest$interested, c("no" = 0, "yes" = 1)),
+        event.rf.pred.prob$yes, nPoints = 1000)
+```
+
+## Inset: Some algorithms have built-in feature selection
+```{r rf.importance, cache=TRUE, dependson="figure5.7_data"}
+rfImp <- varImp(rfFit, scale = FALSE)
+setDT(rfImp$importance, keep.rownames = TRUE)[]
+rfImp$importance <- 
+  rfImp$importance[order(rfImp$importance$Overall,
+                         decreasing = TRUE),]
+rfImp$importance$rn <- reorder(rfImp$importance$rn, rfImp$importance$Overall)
+ggplot(rfImp$importance[1:7], aes(x = rn, y = Overall)) + 
+  geom_bar(stat = "identity") +
+  xlab("Feature") +
+  ylab("Importance") +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  theme(text=element_text(size=16, family="Arial")) +
+  scale_y_continuous(position="top") +
+  #theme(axis.title.y = element_text(angle = 90, vjust = 1.08)) +
+  coord_flip()
 ```
