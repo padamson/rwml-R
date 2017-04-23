@@ -118,6 +118,8 @@ plot_grid(p5, p6, ncol=1, nrow = 2, align = "v")
 
 ```{r figure6.4, eval=TRUE, cache=TRUE, dependson="loadAndJoinData"}
 p7 <- ggplot(dataJoined, aes(pickup_latitude, pickup_longitude)) +
-  geom_point(shape = ".")
+  geom_point(shape = ".") +
+  scale_x_continuous(limits = c(40.6, 40.9)) +
+  scale_y_continuous(limits = c(-74.04, -73.90))
 p7
 ```
