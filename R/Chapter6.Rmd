@@ -1,0 +1,123 @@
+---
+title: "Real-World Machine Learning"
+subtitle: "Chapter 6"
+author: "Paul Adamson"
+date: "April 22, 2017"
+output: html_document
+---
+
+This notebook contains R code to accompany Chapter 6 of the book 
+["Real-World Machine Learning"](https://www.manning.com/books/real-world-machine-learning),
+by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  The code was 
+contributed by [Paul Adamson](http://github.com/padamson). 
+
+*NOTE: working directory should be set to this file's location.*
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+```
+
+### Data for NYC taxi example
+
+The data files for the examples in this chapter are available at 
+[http://www.andresmh.com/nyctaxitrips/](http://www.andresmh.com/nyctaxitrips/).
+They are compressed as a 7-Zip file archive 
+(e.g. with [p7zip](http://p7zip.sourceforge.net)), so you will
+need to have the `7z` command available in your path for the below code to work. 
+(On a mac, you can use [Homebrew](https://brew.sh) to install p7zip with 
+the command `brew install p7zip`.)
+
+*NOTE: downloading and decompressing the archives will take a while*
+
+```{r getData, cache=FALSE}
+baseUrl <- "https://archive.org/download/nycTaxiTripData2013/"
+tripFile <- "trip_data.7z"
+localTripFile <- paste0("../data/", tripFile)
+tripFile1 <- "../data/trip_data_1.csv"
+fareFile <- "trip_fare.7z"
+localFareFile <- paste0("../data/", fareFile)
+fareFile1 <- "../data/trip_fare_1.csv"
+if(!file.exists(localTripFile)){
+  download.file(paste0(baseUrl, tripFile), 
+                destfile = localTripFile,
+                method = "wget",
+                mode = "wb",
+                quiet = TRUE)
+  if(!file.exists(tripFile1)){
+    system(paste0("7z x ", localTripFile, " -o../data"))
+  }
+}
+if(!file.exists(localFareFile)){
+  download.file(paste0(baseUrl, fareFile), 
+                destfile = localFareFile,
+                method = "wget",
+                mode = "wb",
+                quiet = TRUE)
+  if(!file.exists(fareFile1)){
+    system(paste0("7z x ", localFareFile, " -o../data"))
+  }
+}
+```
+
+```{r loadAndJoinData, cache=TRUE}
+npoints <- 50000
+tripData <- fread(tripFile1, nrows=npoints, stringsAsFactors = TRUE) %>%
+  mutate(store_and_fwd_flag = 
+           replace(store_and_fwd_flag, which(store_and_fwd_flag == ""), "N")) %>%
+  filter(trip_distance > 0 & trip_time_in_secs > 0 & passenger_count > 0) %>%
+  filter(pickup_longitude < -70 & pickup_longitude > -80) %>%
+  filter(pickup_latitude > 0 & pickup_latitude < 41) %>%
+  filter(dropoff_longitude < 0 & dropoff_latitude > 0)
+tripData$store_and_fwd_flag <- factor(tripData$store_and_fwd_flag)
+fareData <- fread(fareFile1, nrows=npoints, stringsAsFactors = TRUE)
+dataJoined <- inner_join(tripData, fareData)
+remove(fareData, tripData)
+```
+
+### Figure 6.1 The first six rows of the NYC taxi trip and fare record data
+
+```{r figure6.1, cache=TRUE, dependson="loadAndJoinData"}
+tableRows <- 6
+kable(head(dataJoined[,1:5],tableRows))
+kable(head(dataJoined[,6:10],tableRows))
+kable(head(dataJoined[,11:15],tableRows))
+kable(head(dataJoined[,16:21],tableRows))
+```
+
+### Figure 6.2 The distribution of values across some of the categorical-looking columns in our dataset
+
+```{r figure6.2, cache=TRUE, dependson="loadAndJoinData"}
+theme_set(theme_cowplot(font_size=12))
+p1 <- ggplot(dataJoined, aes(vendor_id)) +
+  geom_bar()
+p2 <- ggplot(dataJoined, aes(rate_code)) +
+  geom_bar()
+p3 <- ggplot(dataJoined, aes(store_and_fwd_flag)) +
+  geom_bar()
+p4 <- ggplot(dataJoined, aes(payment_type)) +
+  geom_bar()
+plot_grid(p1, p2, p3, p4, ncol=2, nrow = 2, align = "hv")
+```
+
+### Figure 6.3 Scatter plots of taxi trips for the time in seconds versus the trip distance, and the time in seconds versus the trip amount (USD), respectively.
+
+```{r figure6.3, eval=TRUE, cache=TRUE, dependson="loadAndJoinData"}
+p5 <- ggplot(dataJoined, aes(trip_time_in_secs, trip_distance)) +
+  geom_point(alpha = 0.1)
+p6 <- ggplot(dataJoined, aes(trip_time_in_secs, total_amount)) +
+  geom_point(alpha = 0.1)
+plot_grid(p5, p6, ncol=1, nrow = 2, align = "v")
+```
+
+### Figure 6.4 The latitude/longitude of pickup locations. Note that the x-axis is flipped, compared to a regular map.
+
+```{r figure6.4, eval=TRUE, cache=TRUE, dependson="loadAndJoinData"}
+p7 <- ggplot(dataJoined, aes(pickup_latitude, pickup_longitude)) +
+  geom_point(shape = ".")
+p7
+```
