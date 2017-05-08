@@ -2,7 +2,7 @@
 title: "Real-World Machine Learning"
 subtitle: "Chapter 6"
 author: "Paul Adamson"
-date: "April 22, 2017"
+date: "May 7, 2017"
 output: html_document
 ---
 
@@ -14,12 +14,21 @@ contributed by [Paul Adamson](http://github.com/padamson).
 *NOTE: working directory should be set to this file's location.*
 
 ```{r setup, include=FALSE}
+set.seed(1111)
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
+library(plyr)
 library(dplyr)
 library(ggplot2)
-library(cowplot)
+library(gridExtra)
+library(caret)
+library(stepPlr)
+library(e1071)
+library(ranger)
+
+# Set table theme to allow for plotmath expressions
+tt <- ttheme_default(colhead=list(fg_params = list(parse=TRUE)))
 ```
 
 ### Data for NYC taxi example
@@ -92,7 +101,6 @@ kable(head(dataJoined[,16:21],tableRows))
 ### Figure 6.2 The distribution of values across some of the categorical-looking columns in our dataset
 
 ```{r figure6.2, cache=TRUE, dependson="loadAndJoinData"}
-theme_set(theme_cowplot(font_size=12))
 p1 <- ggplot(dataJoined, aes(vendor_id)) +
   geom_bar()
 p2 <- ggplot(dataJoined, aes(rate_code)) +
@@ -101,8 +109,9 @@ p3 <- ggplot(dataJoined, aes(store_and_fwd_flag)) +
   geom_bar()
 p4 <- ggplot(dataJoined, aes(payment_type)) +
   geom_bar()
-plot_grid(p1, p2, p3, p4, ncol=2, nrow = 2, align = "hv")
+grid.arrange(p1,p2,p3,p4,nrow=2)
 ```
+
 
 ### Figure 6.3 Scatter plots of taxi trips for the time in seconds versus the trip distance, and the time in seconds versus the trip amount (USD), respectively.
 
@@ -111,7 +120,7 @@ p5 <- ggplot(dataJoined, aes(trip_time_in_secs, trip_distance)) +
   geom_point(alpha = 0.1)
 p6 <- ggplot(dataJoined, aes(trip_time_in_secs, total_amount)) +
   geom_point(alpha = 0.1)
-plot_grid(p5, p6, ncol=1, nrow = 2, align = "v")
+grid.arrange(p5,p6,nrow=2)
 ```
 
 ### Figure 6.4 The latitude/longitude of pickup locations. Note that the x-axis is flipped, compared to a regular map.
@@ -122,4 +131,260 @@ p7 <- ggplot(dataJoined, aes(pickup_latitude, pickup_longitude)) +
   scale_x_continuous(limits = c(40.6, 40.9)) +
   scale_y_continuous(limits = c(-74.04, -73.90))
 p7
+```
+
+### Figure 6.5 The distribution of tip amount. 
+
+```{r figure6.5, eval=TRUE, cache=TRUE, dependson="loadAndJoinData"}
+p8 <- ggplot(dataJoined, aes(tip_amount)) +
+  geom_histogram() +
+  scale_x_continuous(limits = c(-1, 16.0), name = "Tip amount (USD)") +
+  scale_y_continuous(name = "Count")
+p8
+```
+
+### Figure 6.6 The distribution of tip amounts when omitting cash payments
+
+```{r figure6.6, eval=TRUE, cache=TRUE, dependson="loadAndJoinData"}
+dataJoined <- dataJoined %>%
+  filter(payment_type != "CSH")
+p9 <- ggplot(dataJoined, aes(tip_amount)) +
+  geom_histogram() +
+  scale_x_continuous(limits = c(-1, 16.0), name = "Tip amount (USD)") +
+  scale_y_continuous(name = "Count")
+p9
+```
+
+### Functions to plot a ROC curve adapted from Chapter 4
+
+```{r listing4.3, eval=TRUE, cache=TRUE}
+# Returns the false-positive and true-positive rates at nPoints thresholds for 
+# the given true and predicted labels
+# trueLabels: 0=FALSE; 1=TRUE
+rocCurve <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
+  # Allocates the threshold and ROC lists
+  thr <- seq(0,1,length=nPoints)
+  tpr <- numeric(nPoints)
+  fpr <- numeric(nPoints)
+  
+  # Precalculates values for the positive and negative cases, used in the loop
+  pos <- trueLabels == posClass
+  neg <- !pos 
+  nPos <- sum(pos, na.rm=TRUE)
+  nNeg <- sum(neg, na.rm=TRUE)
+  
+  # For each threshold, calculates the rate of true and false positives
+  for (i in 2:length(thr)) {
+    t <- thr[i]
+    meetOrExceedThreshold <- predictedProbs >= t
+    tpr[i] <-  sum((meetOrExceedThreshold & pos), na.rm=TRUE) / nPos
+    fpr[i] <-  sum((meetOrExceedThreshold & neg), na.rm=TRUE) / nNeg
+  }
+  
+  # Create data frame without duplicated fpr's to return
+  duplicatedFPRs <- duplicated(fpr)
+  df <- data.frame(fpr=fpr[!duplicatedFPRs],tpr=tpr[!duplicatedFPRs],thr=thr[!duplicatedFPRs])
+  
+  return(df)
+}
+```
+
+```{r plotROC, eval=TRUE, cache=TRUE, dependson="listing4.3"}
+plotROC <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
+  auc <- 0
+  df <- rocCurve(trueLabels = trueLabels,
+                 predictedProbs = predictedProbs,
+                 nPoints = nPoints,
+                 posClass = posClass)
+  
+  idx <- 3:length(df$fpr)
+  auc <- as.double( 
+    (df$fpr[idx-1] - df$fpr[idx]) %*% (df$tpr[idx] + df$tpr[idx-1]) ) / 2.0 
+  
+  ggplot(df,aes(x=fpr,y=tpr)) +
+  geom_abline(slope=1, intercept = 0,
+              colour = "green") + #we've added the line for random baseline for reference
+  geom_step(direction="vh", colour="blue") +
+  scale_x_continuous(limits = c(0,1)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(x = "False-positive rate",
+       y = "True-positive rate") +
+  annotate("text", x=.6,y=.2,label=paste0("Area under the curve (AUC) = ",round(auc,digits = 2)))
+  
+}
+```
+
+### Listing 6.1 Logistic regression tip-prediction model
+
+```{r listing6.1, eval=TRUE, cache=TRUE, dependson="figure6.6"}
+numericalData <- dataJoined[,c(8:14,16:18,20)]
+numericalData[,c(1:11)] <- scale(numericalData[,c(1:11)], scale=TRUE)
+numericalData$tipped <- as.factor(c(dataJoined$tip_amount > 0))
+levels(numericalData$tipped) <- c("false", "true")
+trainIndex <- createDataPartition(numericalData$tipped, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+numericalDataTrain <- numericalData[ trainIndex,]
+numericalDataTest <- numericalData[-trainIndex,]
+
+fitControl <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           savePredictions = TRUE,
+                           summaryFunction=twoClassSummary, 
+                           classProbs=TRUE)
+
+plrFit <- train(tipped ~ ., data = numericalDataTrain,
+                method = "plr",
+                trControl = fitControl) 
+```
+
+### Figure 6.7 The receiver operating characteristic (ROC) curve of the logistic regression tip/no-tip classifier. 
+
+```{r figure6.7, eval=TRUE, cache=TRUE, dependson="listing6.1, plotROC"}
+plrPredProb <- predict(object=plrFit, 
+                       numericalDataTest, type='prob')
+plotROC(revalue(numericalDataTest$tipped, c("false" = 0, "true" = 1)),
+        plrPredProb$true, nPoints = 4000)
+```
+
+### Listing 6.2 Random forest tip-prediction model
+
+```{r listing6.2, eval=TRUE, cache=TRUE, dependson="figure6.6, listing6.1"}
+rfFit <- train(tipped ~ ., data = numericalDataTrain,
+               method = "ranger",
+               importance = "impurity",
+               trControl = fitControl) 
+```
+
+### Figure 6.8 The ROC curve of the nonlinear random forest model. 
+
+```{r figure6.8, eval=TRUE, cache=TRUE, dependson="listing6.2, plotROC"}
+rfPredProb <- predict(object=rfFit, 
+                       numericalDataTest, type='prob')
+
+plotROC(revalue(numericalDataTest$tipped, c("false" = 0, "true" = 1)),
+        rfPredProb$true, nPoints = 4000)
+```
+
+### Figure 6.9 The important features of the random forest model.
+
+```{r figure6.9, cache=TRUE, dependson="listing6.2"}
+rfImp <- varImp(rfFit, scale = FALSE)
+setDT(rfImp$importance, keep.rownames = TRUE)[]
+rfImp$importance <- 
+  rfImp$importance[order(rfImp$importance$Overall,
+                         decreasing = TRUE),]
+rfImp$importance$rn <- reorder(rfImp$importance$rn, rfImp$importance$Overall)
+impDF <- data.frame(Feature=rfImp$importance$rn,
+                 Importance=(rfImp$importance$Overall/sum(rfImp$importance$Overall)))
+fig6.9 <- tableGrob(head(impDF,11), rows=NULL, theme=tt)
+grid.arrange(fig6.9,
+             as.table=TRUE)
+```
+
+### Listing 6.3 Converting categorical columns to numerical features
+
+```{r listing6.3, eval=TRUE, cache=TRUE, dependson="listing6.1"}
+categoryData <- dataJoined[,c(3:5,15)]
+dummies <- dummyVars(" ~ .", data = categoryData, fullRank = TRUE, 
+                     levelsOnly = FALSE)
+catNumeric <- data.frame(predict(dummies, newdata = categoryData))
+numCatData <- data.frame(numericalData, catNumeric)
+```
+
+### Figure 6.10 The ROC curve and feature importance list of the random forest model with all categorical variables converted to Boolean (0/1) columns, one per category per feature. 
+
+```{r figure6.10a, eval=TRUE, cache=TRUE, dependson="listing6.3"}
+numCatDataTrain <- numCatData[ trainIndex,]
+numCatDataTest <- numCatData[-trainIndex,]
+
+rfFitNumCatData <- train(tipped ~ ., data = numCatDataTrain,
+                         method = "ranger",
+                         importance = "impurity", 
+                         trControl = fitControl) 
+
+```
+
+```{r figure6.10b, eval=TRUE, cache=TRUE, dependson="figure6.10a, plotROC"}
+rfNumCatPredProb <- predict(object=rfFitNumCatData, 
+                            numCatDataTest, type='prob')
+
+fig6.10a <- plotROC(revalue(numCatDataTest$tipped, c("false" = 0, "true" = 1)),
+        rfNumCatPredProb$true, nPoints = 4000)
+
+rfImp <- varImp(rfFitNumCatData, scale = FALSE)
+setDT(rfImp$importance, keep.rownames = TRUE)[]
+rfImp$importance <- 
+  rfImp$importance[order(rfImp$importance$Overall,
+                         decreasing = TRUE),]
+rfImp$importance$rn <- reorder(rfImp$importance$rn, rfImp$importance$Overall)
+impDF <- data.frame(Feature=rfImp$importance$rn,
+                    Importance=(rfImp$importance$Overall/sum(rfImp$importance$Overall)))
+
+fig6.10b <- tableGrob(head(impDF,11), rows=NULL, theme=tt)
+# Plot chart and table into one object
+grid.arrange(fig6.10a, fig6.10b,
+             nrow=1,
+             as.table=TRUE,
+             widths = c(5,3))
+```
+
+### Listing 6.4 Date-time features
+
+```{r listing6.4, eval=TRUE, cache=TRUE, dependson="listing6.3"}
+pickupData <- data.frame(pickup_datetime = dataJoined$pickup_datetime) %>%
+  mutate(datetime = as.POSIXct(strptime(pickup_datetime, format="%Y-%m-%d %H:%M:%OS", tz="UTC")),
+         pickup_hour_of_day = as.numeric(substr(datetime, 12, 13)), 
+         pickup_day_of_week = as.integer(as.factor(weekdays(datetime))),
+         pickup_week_of_year = week(datetime)
+  ) %>%
+  select(c(-datetime, -pickup_datetime))
+
+dropoffData <- data.frame(dropoff_datetime = dataJoined$dropoff_datetime) %>%
+  mutate(datetime = as.POSIXct(strptime(dropoff_datetime, format="%Y-%m-%d %H:%M:%OS", tz="UTC")),
+         dropoff_hour_of_day = as.numeric(substr(datetime, 12, 13)), 
+         dropoff_day_of_week = as.integer(as.factor(weekdays(datetime))),
+         dropoff_week_of_year = week(datetime)
+  ) %>%
+  select(c(-datetime, -dropoff_datetime))
+
+numCatTimeData <- data.frame(numCatData, pickupData, dropoffData)
+```
+
+### Figure 6.11 The ROC curve and feature importance list for the random forest model, including all categorical features and additional date-time features
+
+```{r figure6.11a, eval=TRUE, cache=TRUE, dependson="listing6.4"}
+numCatTimeDataTrain <- numCatTimeData[ trainIndex,]
+numCatTimeDataTest <- numCatTimeData[-trainIndex,]
+
+rfFitNumCatTimeData <- train(tipped ~ ., data = numCatTimeDataTrain,
+                         method = "ranger",
+                         importance = "impurity", 
+                         trControl = fitControl) 
+```
+
+```{r figure6.11b, eval=TRUE, cache=TRUE, dependson="figure6.11a, plotROC"}
+rfNumCatTimePredProb <- predict(object=rfFitNumCatTimeData, 
+                            numCatTimeDataTest, type='prob')
+
+fig6.11a <- plotROC(revalue(numCatTimeDataTest$tipped, c("false" = 0, "true" = 1)),
+                    rfNumCatTimePredProb$true, nPoints = 4000)
+
+rfImp <- varImp(rfFitNumCatTimeData, scale = FALSE)
+setDT(rfImp$importance, keep.rownames = TRUE)[]
+rfImp$importance <- 
+  rfImp$importance[order(rfImp$importance$Overall,
+                         decreasing = TRUE),]
+rfImp$importance$rn <- reorder(rfImp$importance$rn, rfImp$importance$Overall)
+impDF <- data.frame(Feature=rfImp$importance$rn,
+                    Importance=(rfImp$importance$Overall/sum(rfImp$importance$Overall)))
+
+fig6.11b <- tableGrob(head(impDF,11), rows=NULL, theme=tt)
+# Plot chart and table into one object
+grid.arrange(fig6.11a, fig6.11b,
+             nrow=1,
+             as.table=TRUE,
+             widths = c(5,3))
+
 ```

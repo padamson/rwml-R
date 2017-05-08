@@ -362,6 +362,7 @@ plotROC(revalue(eventTest$interested, c("no" = 0, "yes" = 1)),
 ```
 
 ## Inset: Some algorithms have built-in feature selection
+
 ```{r rf.importance, cache=TRUE, dependson="figure5.7_data"}
 rfImp <- varImp(rfFit, scale = FALSE)
 setDT(rfImp$importance, keep.rownames = TRUE)[]
