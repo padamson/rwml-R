@@ -28,6 +28,8 @@ library(gbm)
 library(doParallel)
 library(randomForest)
 
+library(kernlab)
+
 library(RColorBrewer)
 
 .pardefault <- par()
@@ -148,41 +150,17 @@ kable(titanic.ordered[titanic.ordered$yes > 0.68 & titanic.ordered$yes < 0.73,])
 
 ## Listing 4.3 The ROC curve
 
-```{r listing4.3, eval=TRUE, cache=TRUE}
-# Returns the false-positive and true-positive rates at nPoints thresholds for 
-# the given true and predicted labels
-# trueLabels: 0=FALSE; 1=TRUE
-rocCurve <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
-  # Allocates the threshold and ROC lists
-  thr <- seq(0,1,length=nPoints)
-  tpr <- numeric(nPoints)
-  fpr <- numeric(nPoints)
-  
-  # Precalculates values for the positive and negative cases, used in the loop
-  pos <- trueLabels == posClass
-  neg <- !pos 
-  nPos <- sum(pos, na.rm=TRUE)
-  nNeg <- sum(neg, na.rm=TRUE)
-  
-  # For each threshold, calculates the rate of true and false positives
-  for (i in 1:length(thr)) {
-    t <- thr[i]
-    meetOrExceedThreshold <- predictedProbs >= t
-    tpr[i] <-  sum((meetOrExceedThreshold & pos), na.rm=TRUE) / nPos
-    fpr[i] <-  sum((meetOrExceedThreshold & neg), na.rm=TRUE) / nNeg
-  }
-  
-  # Create data frame without duplicated fpr's to return
-  duplicatedFPRs <- duplicated(fpr)
-  df <- data.frame(fpr=fpr[!duplicatedFPRs],tpr=tpr[!duplicatedFPRs],thr=thr[!duplicatedFPRs])
-  
-  return(df)
-}
+```{r chapter4listings, echo=FALSE}
+read_chunk('chapter4listings.R')
+```
+
+```{r listing4.3, echo=TRUE, tidy=TRUE, tidy.opts=list(comment=FALSE)}  
+<<listing4.3>>
 ```
 
 ## Figure 4.16 The ROC curve defined by calculating the confusion matrix and ROC metrics at 100 threshold points from 0 to 1. By convention, you plot the false-positive rate on the x-axis and the true-positive rate on the y-axis.
 
-```{r figure4.16, eval=TRUE, cache=TRUE, dependson=c("listing4.3, figure4.15")}
+```{r figure4.16, eval=TRUE, cache=TRUE, dependson=c("figure4.15")}
 df<-rocCurve(revalue(titanicTest$Survived.yes, c("no" = 0, "yes" = 1)),
              titanic.gbm.pred.prob$yes)
 ggplot(df,aes(x=fpr,y=tpr)) +
@@ -193,21 +171,10 @@ ggplot(df,aes(x=fpr,y=tpr)) +
 
 ## Listing 4.4 The area under the ROC curve
 
-```{r listing4.4, eval=TRUE, cache=TRUE}
-auc <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
-  auc <- 0
-  df <- rocCurve(trueLabels = trueLabels,
-                 predictedProbs = predictedProbs,
-                 nPoints = nPoints,
-                 posClass = posClass)
-  
-  for (i in 2:length(df$fpr)) {
-    auc <- auc + 0.5 * (df$fpr[i-1] - df$fpr[i]) * (df$tpr[i-1] + df$tpr[i])
-  }
-  
-  return(auc)
-}
+```{r listing4.4, echo=TRUE, tidy=TRUE, tidy.opts=list(comment=FALSE)}
+<<listing4.4>>
 ```
+
 ## Bonus. Relative influence of variables in model.
 
 We can call the `summary` function on our model to get a data frame
