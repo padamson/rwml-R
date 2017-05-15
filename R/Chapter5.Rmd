@@ -100,58 +100,32 @@ train.joined.numeric$interested <-
   revalue(train.joined.numeric$interested, c("0" = "no", "1" = "yes"))
 ```
 
-
-```{r listing4.3, eval=TRUE, cache=TRUE}
-# Returns the false-positive and true-positive rates at nPoints thresholds for 
-# the given true and predicted labels
-# trueLabels: 0=FALSE; 1=TRUE
-rocCurve <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
-  # Allocates the threshold and ROC lists
-  thr <- seq(0,1,length=nPoints)
-  tpr <- numeric(nPoints)
-  fpr <- numeric(nPoints)
-  
-  # Precalculates values for the positive and negative cases, used in the loop
-  pos <- trueLabels == posClass
-  neg <- !pos 
-  nPos <- sum(pos, na.rm=TRUE)
-  nNeg <- sum(neg, na.rm=TRUE)
-  
-  # For each threshold, calculates the rate of true and false positives
-  for (i in 2:length(thr)) {
-    t <- thr[i]
-    meetOrExceedThreshold <- predictedProbs >= t
-    tpr[i] <-  sum((meetOrExceedThreshold & pos), na.rm=TRUE) / nPos
-    fpr[i] <-  sum((meetOrExceedThreshold & neg), na.rm=TRUE) / nNeg
-  }
-  
-  # Create data frame without duplicated fpr's to return
-  duplicatedFPRs <- duplicated(fpr)
-  df <- data.frame(fpr=fpr[!duplicatedFPRs],tpr=tpr[!duplicatedFPRs],thr=thr[!duplicatedFPRs])
-  
-  return(df)
-}
+```{r chapter4listings, echo=FALSE}
+read_chunk('chapter4listings.R')
 ```
 
-```{r plotROC, eval=TRUE, cache=TRUE, dependson="listing4.3"}
+```{r listing4.3, echo=TRUE,tidy=TRUE, tidy.opts=list(comment=FALSE)}
+<<listing4.3>>
+```
+
+```{r listing4.4, echo=TRUE,tidy=TRUE, tidy.opts=list(comment=FALSE)}
+<<listing4.4>>
+```
+
+```{r plotROC, eval=TRUE, cache=TRUE}
 plotROC <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
-  auc <- 0
+  auc <- auc(trueLabels, predictedProbs, nPoints, posClass)
   df <- rocCurve(trueLabels = trueLabels,
                  predictedProbs = predictedProbs,
                  nPoints = nPoints,
                  posClass = posClass)
-  
-  idx <- 3:length(df$fpr)
-  auc <- as.double( 
-    (df$fpr[idx-1] - df$fpr[idx]) %*% (df$tpr[idx] + df$tpr[idx-1]) ) / 2.0 
-  
   ggplot(df,aes(x=fpr,y=tpr)) +
-  geom_step(direction="vh") +
-  scale_x_continuous(limits = c(0,1)) +
-  scale_y_continuous(limits = c(0,1)) +
-  labs(x = "False-positive rate",
-       y = "True-positive rate") +
-  annotate("text", x=.5,y=.5,label=paste0("Area under the curve: ",round(auc,digits = 2)))
+    geom_step(direction="vh") +
+    scale_x_continuous(limits = c(0,1)) +
+    scale_y_continuous(limits = c(0,1)) +
+    labs(x = "False-positive rate",
+         y = "True-positive rate") +
+    annotate("text", x=.5,y=.5,label=paste0("Area under the curve: ",round(auc,digits = 2)))
   
 }
 ```
