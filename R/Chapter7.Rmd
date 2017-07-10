@@ -1,0 +1,149 @@
+---
+title: "Real-World Machine Learning"
+subtitle: "Chapter 7"
+author: "Paul Adamson"
+date: "May 20, 2017"
+output: html_document
+---
+
+This notebook contains R code to accompany Chapter 7 of the book 
+["Real-World Machine Learning"](https://www.manning.com/books/real-world-machine-learning),
+by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  The code was 
+contributed by [Paul Adamson](http://github.com/padamson). 
+
+*NOTE: working directory should be set to this file's location.*
+
+```{r setup, include=FALSE}
+set.seed(1111)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+library(RSocrata)
+library(xts)
+#library(data.table)
+library(plyr)
+library(dplyr)
+library(lubridate)
+#library(ggplot2)
+#library(gridExtra)
+#library(caret)
+#library(stepPlr)
+#library(e1071)
+#library(ranger)
+#
+# Set table theme to allow for plotmath expressions
+#tt <- ttheme_default(colhead=list(fg_params = list(parse=TRUE)))
+```
+
+### San Francisco Crime Data
+
+San Francisco crime data used for this example is publicly available at 
+https://data.sfgov.org and can be
+accessed via the [SODA Consumer API](https://dev.socrata.com/consumers/getting-started.html).
+The `RSocrata` package is used here to interact with the API easily from R. The data set we
+will be working with (crime data in the years 2003 through 2014) consists of about 1.7 million
+events, so we will need to register for an API token and store it in the file
+`../proprietary_data/DataSFAppToken.txt`. If you are not familiar with Socrata and the SODA
+Consumer API, be sure to read the entire [getting started guide](https://dev.socrata.com/consumers/getting-started.html). 
+(The link to create a developer
+account and register an API token is at the bottom of the page.)
+
+*NOTE: Depending on your internet connection speed, downloading the data in the next step  will take a while. Also, storing the data file will take about a half gigabyte of disk space.*
+
+*NOTE: Working directory should be set to this file's location.*
+
+```{r getData, cache=TRUE}
+token <- scan("../proprietary_data/DataSFAppToken.txt",what = "character")
+dataFile <- "../proprietary_data/socrata_crime.csv"
+
+if(!exists("socrataDF")){ #check to see if dataframe exists in interactive environment
+  if(file.exists(dataFile)){
+    socrataDF <- read.csv(dataFile)
+  } else { 
+    socrataDF <- read.socrata("https://data.sfgov.org/resource/cuks-n6tp.csv?$where=date between '2003-01-01T00:00:00' and '2014-12-31T23:59:59'", app_token = token)
+    write.csv(socrataDF, file = "../proprietary_data/socrata_crime.csv")
+  }
+}
+
+socrataDF$datechar <- format(socrataDF$date,"%m/%d/%Y")
+socrataDF$datetime <- as.POSIXct(strptime(paste(socrataDF$datechar, socrataDF$time), "%m/%d/%Y %H:%M"))
+```
+
+### Table 7.3 San Francisco crime data in its raw form, as a sequence of events
+
+```{r table7.3, cache=TRUE, dependson="getData"}
+tableRows <- 10
+kable(head(
+  socrataDF %>% 
+    select(c(incidntnum, datetime, datechar, time, pddistrict, category)) %>%
+    filter(datetime > as.POSIXct("2008-04-13") & datetime < as.POSIXct("2008-04-14")) %>%
+    arrange(time) %>%
+    filter(time > "00:50") %>%
+    select(-datetime),
+  tableRows), col.names = c("Incident number", "Date", "Time", "District", "Category"))
+  
+```
+
+### Listing 7.4 Converting SF crime event data to classical time series
+
+```{r listing7.4, cache=TRUE, dependson="getData"}
+socrataDF$month <- floor_date(socrataDF$datetime, "month")
+crimeByMonth <- socrataDF %>% group_by(month) %>% summarise(n = n())
+crimeByMonth <- crimeByMonth[-c(1,146),] # remove "2002-12-01" data that is for a partial month and "NA"
+crimeTS <- ts(crimeByMonth$n, frequency = 12, start = c(2003,1))
+```
+
+### Figure 7.6 Classical time series of monthly crime count in San Francisco.
+```{r figure7.6, cache=TRUE, dependson="listing7.4"}
+plot(crimeTS,
+     xlab = "Year",
+     ylab = "Number of crimes",
+     axes=FALSE)
+axis(side=1, at=c(2003:2015))
+axis(side=2, at=seq(8000, 14000, by=1000))
+box()
+```
+
+### Listing 7.5 Windowed statistics and differences
+
+```{r listing7.5, cache=TRUE, dependson=listing7.4}
+crimeWindow1 <- window(crimeTS,c(2014,3),c(2014,6)) #crime data from Spring, 2014
+meanWindow1 <- mean(crimeWindow1)
+stdWindow1 <- sd(crimeWindow1)
+crimeWindow2 <- window(crimeTS,c(2013,3),c(2013,6)) #crime data from Spring, 2013
+meanWindow2 <- mean(crimeWindow2)
+stdWindow2 <- sd(crimeWindow2)
+meanDiff <- meanWindow1 - meanWindow2
+stdDiff <- stdWindow1 - stdWindow2
+
+kable(data.frame(variable = c("meanWindow1", "meanWindow2", "meanDiff", "stdWindow1", "stdWindow2", "stdDiff"),
+                 value = c(meanWindow1, meanWindow2, meanDiff, stdWindow1, stdWindow2, stdDiff)))
+
+```
+
+### Figure 7.7 Top: Correlation of the original time series and 12-month lagged time series defines the 12-month autocorrelation.  Bottom: The autocorrelation function for the SF crime data.
+
+```{r figure7.7, cache=TRUE, dependson="listing7.4"}
+crimeTSlagged <- lag(crimeTS, 12)
+plot(crimeTS,
+     xlab = "Year",
+     ylab = "Number of crimes",
+     axes=FALSE)
+axis(side=1, at=c(2003:2015))
+axis(side=2, at=seq(8000, 14000, by=1000))
+box()
+lines(crimeTSlagged, col = "blue")
+#TODO add legend
+
+acf(crimeTS, lag.max = 50)
+```
+
+### Figure 7.8 Left: Periodogram of the San Francisco crime data, showing the spectral density as a function of frequency. Right: The same periodogram with the x-axis transformed from frequency to period.
+
+```{r figure7.8, cache=TRUE, dependson="figure7.7"}
+
+spec.pgram(crimeTS, detrend = TRUE)
+
+```
+
+
+
