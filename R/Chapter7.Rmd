@@ -39,27 +39,33 @@ library(lubridate)
 San Francisco crime data used for this example is publicly available at 
 https://data.sfgov.org and can be
 accessed via the [SODA Consumer API](https://dev.socrata.com/consumers/getting-started.html).
-The `RSocrata` package is used here to interact with the API easily from R. The data set we
-will be working with (crime data in the years 2003 through 2014) consists of about 1.7 million
-events, so we will need to register for an API token and store it in the file
-`../proprietary_data/DataSFAppToken.txt`. If you are not familiar with Socrata and the SODA
+The `RSocrata` package is used here to interact with the API easily from R. The dataset we
+will be working with (crime data in the years 2003 through May 2018) consists of about 2.1 million
+events. To download the data via the `RSocrata` package, you will need to register for an account at
+[https://www.tylertech.com/products/data-insights](https://www.tylertech.com/products/data-insights), and store your registered email address and password in
+`../proprietary_data/socrata_email.txt` and `../proprietary_data/socrata_password.txt`, respectively. 
+If you are not familiar with Socrata and the SODA
 Consumer API, be sure to read the entire [getting started guide](https://dev.socrata.com/consumers/getting-started.html). 
 (The link to create a developer
-account and register an API token is at the bottom of the page.)
+account and register an API token is at the bottom of the page.) The API endpoint for the specific dataset
+is at: [https://dev.socrata.com/foundry/data.sfgov.org/tmnf-yvry](https://dev.socrata.com/foundry/data.sfgov.org/tmnf-yvry).
 
-*NOTE: Depending on your internet connection speed, downloading the data in the next step  will take a while. Also, storing the data file will take about a half gigabyte of disk space.*
+*NOTE: Depending on your internet connection speed, downloading the data in the next step will take a while. Also, storing the data file will take about a half gigabyte of disk space.*
 
 *NOTE: Working directory should be set to this file's location.*
 
 ```{r getData, cache=TRUE}
-token <- scan("../proprietary_data/DataSFAppToken.txt",what = "character")
+socrata_email <- scan("../proprietary_data/socrata_email.txt",what = "character")
+socrata_password <- scan("../proprietary_data/socrata_password.txt",what = "character")
 dataFile <- "../proprietary_data/socrata_crime.csv"
 
 if(!exists("socrataDF")){ #check to see if dataframe exists in interactive environment
   if(file.exists(dataFile)){
     socrataDF <- read.csv(dataFile)
   } else { 
-    socrataDF <- read.socrata("https://data.sfgov.org/resource/cuks-n6tp.csv?$where=date between '2003-01-01T00:00:00' and '2014-12-31T23:59:59'", app_token = token)
+    socrataDF <- read.socrata("https://data.sfgov.org/resource/tmnf-yvry.csv?$where=date between '2003-01-01T00:00:00' and '2014-12-31T23:59:59'", 
+                              email = socrata_email,
+                              password = socrata_password)
     write.csv(socrataDF, file = "../proprietary_data/socrata_crime.csv")
   }
 }

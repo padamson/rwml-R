@@ -35,42 +35,49 @@ tt <- ttheme_default(colhead=list(fg_params = list(parse=TRUE)))
 
 The data files for the examples in this chapter are available at 
 [http://www.andresmh.com/nyctaxitrips/](http://www.andresmh.com/nyctaxitrips/).
-They are compressed as a 7-Zip file archive 
+The data files are compressed as a 7-Zip file archive 
 (e.g. with [p7zip](http://p7zip.sourceforge.net)), so you will
 need to have the `7z` command available in your path for the below code to work. 
-(On a mac, you can use [Homebrew](https://brew.sh) to install p7zip with 
-the command `brew install p7zip`.)
+On a mac, you can use [Homebrew](https://brew.sh) to install p7zip 
+(`brew install p7zip`).
 
-*NOTE: downloading and decompressing the archives will take a while*
+*NOTE: Depending on the speed of your internet connection and computer, downloading and decompressing the archives will take a while. If you are on a really slow internet connection, the `timeout` option may need to be increased.*
 
 ```{r getData, cache=FALSE}
 baseUrl <- "https://archive.org/download/nycTaxiTripData2013/"
 tripFile <- "trip_data.7z"
-localTripFile <- paste0("../data/", tripFile)
-tripFile1 <- "../data/trip_data_1.csv"
+data_dir <- "../proprietary_data"
+localTripFile <- paste0(data_dir, "/", tripFile)
+tripFile1 <- paste0(data_dir, "/trip_data_1.csv")
 fareFile <- "trip_fare.7z"
-localFareFile <- paste0("../data/", fareFile)
-fareFile1 <- "../data/trip_fare_1.csv"
+localFareFile <- paste0(data_dir, "/", fareFile)
+fareFile1 <- paste0(data_dir, "/trip_fare_1.csv")
+op <- options()
+options(timeout = 300)
+
 if(!file.exists(localTripFile)){
   download.file(paste0(baseUrl, tripFile), 
                 destfile = localTripFile,
-                method = "wget",
+                method = "auto",
                 mode = "wb",
+                cacheOK = FALSE,
                 quiet = TRUE)
   if(!file.exists(tripFile1)){
-    system(paste0("7z x ", localTripFile, " -o../data"))
+    system(paste0("7z x ", localTripFile, " -o", data_dir))
   }
 }
 if(!file.exists(localFareFile)){
   download.file(paste0(baseUrl, fareFile), 
                 destfile = localFareFile,
-                method = "wget",
+                method = "auto",
                 mode = "wb",
+                cacheOK = FALSE,
                 quiet = TRUE)
   if(!file.exists(fareFile1)){
-    system(paste0("7z x ", localFareFile, " -o../data"))
+    system(paste0("7z x ", localFareFile, " -o", data_dir))
   }
 }
+options(op)
 ```
 
 ```{r loadAndJoinData, cache=TRUE}
