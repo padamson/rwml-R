@@ -150,12 +150,11 @@ kable(titanic.ordered[titanic.ordered$yes > 0.68 & titanic.ordered$yes < 0.73,])
 
 ## Listing 4.3 The ROC curve
 
-```{r chapter4listings, echo=FALSE}
+```{r chapter4listings, include=FALSE, echo=FALSE}
 read_chunk('chapter4listings.R')
 ```
 
 ```{r listing4.3, echo=TRUE, tidy=TRUE, tidy.opts=list(comment=FALSE)}  
-<<listing4.3>>
 ```
 
 ## Figure 4.16 The ROC curve defined by calculating the confusion matrix and ROC metrics at 100 threshold points from 0 to 1. By convention, you plot the false-positive rate on the x-axis and the true-positive rate on the y-axis.
@@ -172,7 +171,6 @@ ggplot(df,aes(x=fpr,y=tpr)) +
 ## Listing 4.4 The area under the ROC curve
 
 ```{r listing4.4, echo=TRUE, tidy=TRUE, tidy.opts=list(comment=FALSE)}
-<<listing4.4>>
 ```
 
 ## Bonus. Relative influence of variables in model.
