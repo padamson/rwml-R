@@ -3,7 +3,9 @@ title: "Real-World Machine Learning"
 subtitle: "Chapter 5"
 author: "Paul Adamson"
 date: "April 2, 2017"
-output: html_document
+format:
+  html:
+    toc: true
 ---
 
 This notebook contains R code to accompany Chapter 5 of the book 
@@ -100,16 +102,18 @@ train.joined.numeric$interested <-
   revalue(train.joined.numeric$interested, c("0" = "no", "1" = "yes"))
 ```
 
-```{r chapter4listings, echo=FALSE}
+```{r chapter4listings, include=FALSE, echo=FALSE}
 read_chunk('chapter4listings.R')
 ```
 
+### Listing 4.3 The ROC curve
+
 ```{r listing4.3, echo=TRUE,tidy=TRUE, tidy.opts=list(comment=FALSE)}
-<<listing4.3>>
 ```
 
+### Listing 4.4 The area under the ROC curve
+
 ```{r listing4.4, echo=TRUE,tidy=TRUE, tidy.opts=list(comment=FALSE)}
-<<listing4.4>>
 ```
 
 ```{r plotROC, eval=TRUE, cache=TRUE}

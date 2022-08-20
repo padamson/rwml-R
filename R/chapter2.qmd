@@ -3,7 +3,9 @@ title: "Real-World Machine Learning"
 subtitle: "Chapter 2"
 author: "Paul Adamson"
 date: "December 7, 2016"
-output: html_document
+format:
+  html:
+    toc: true
 ---
 
 This file contains R code to accompany Chapter 2 of the book 

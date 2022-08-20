@@ -2,8 +2,10 @@
 title: "Real-World Machine Learning"
 subtitle: "Chapter 6"
 author: "Paul Adamson"
-date: "May 7, 2017"
-output: html_document
+date: "Aug 18, 2022"
+format:
+  html:
+    toc: true
 ---
 
 This notebook contains R code to accompany Chapter 6 of the book 
@@ -16,6 +18,8 @@ contributed by [Paul Adamson](http://github.com/padamson).
 ```{r setup, include=FALSE}
 set.seed(1111)
 library(knitr)
+project_dir <- file.path(Sys.getenv("HOME"), "projects/github-padamson/rwml-R")
+setwd(file.path(project_dir, "R"))
 knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(plyr)
@@ -26,6 +30,8 @@ library(caret)
 library(stepPlr)
 library(e1071)
 library(ranger)
+library(formatR)
+library(languageserver)
 
 # Set table theme to allow for plotmath expressions
 tt <- ttheme_default(colhead=list(fg_params = list(parse=TRUE)))
@@ -34,43 +40,27 @@ tt <- ttheme_default(colhead=list(fg_params = list(parse=TRUE)))
 ### Data for NYC taxi example
 
 The data files for the examples in this chapter are available at 
-[http://www.andresmh.com/nyctaxitrips/](http://www.andresmh.com/nyctaxitrips/).
-They are compressed as a 7-Zip file archive 
+[https://archive.org/download/nycTaxiTripData2013/](https://archive.org/download/nycTaxiTripData2013/).
+Specifically, download the following files and put them in the folder `proprietary_data`:
+
+- [https://archive.org/download/nycTaxiTripData2013/trip_data.7z](https://archive.org/download/nycTaxiTripData2013/)
+- [https://archive.org/download/nycTaxiTripData2013/trip_fare.7z](https://archive.org/download/nycTaxiTripData2013/)
+
+The data files are compressed as a 7-Zip file archive 
 (e.g. with [p7zip](http://p7zip.sourceforge.net)), so you will
-need to have the `7z` command available in your path for the below code to work. 
-(On a mac, you can use [Homebrew](https://brew.sh) to install p7zip with 
-the command `brew install p7zip`.)
+need to use the `7z` program to unzip the files.
+On a mac, you can use [Homebrew](https://brew.sh) to install p7zip 
+(`brew install p7zip`) then execute the commands `7z x trip_data.7z` and `7z x trip_fare.7z`
+in the `proprietary_data` folder.
 
-*NOTE: downloading and decompressing the archives will take a while*
-
-```{r getData, cache=FALSE}
-baseUrl <- "https://archive.org/download/nycTaxiTripData2013/"
+```{r unzipData, cache=FALSE}
 tripFile <- "trip_data.7z"
-localTripFile <- paste0("../data/", tripFile)
-tripFile1 <- "../data/trip_data_1.csv"
+data_dir <- file.path(getwd(), "../proprietary_data")
+localTripFile <- file.path(data_dir, tripFile)
+tripFile1 <- file.path(data_dir, "trip_data_1.csv")
 fareFile <- "trip_fare.7z"
-localFareFile <- paste0("../data/", fareFile)
-fareFile1 <- "../data/trip_fare_1.csv"
-if(!file.exists(localTripFile)){
-  download.file(paste0(baseUrl, tripFile), 
-                destfile = localTripFile,
-                method = "wget",
-                mode = "wb",
-                quiet = TRUE)
-  if(!file.exists(tripFile1)){
-    system(paste0("7z x ", localTripFile, " -o../data"))
-  }
-}
-if(!file.exists(localFareFile)){
-  download.file(paste0(baseUrl, fareFile), 
-                destfile = localFareFile,
-                method = "wget",
-                mode = "wb",
-                quiet = TRUE)
-  if(!file.exists(fareFile1)){
-    system(paste0("7z x ", localFareFile, " -o../data"))
-  }
-}
+localFareFile <- paste0(data_dir, fareFile)
+fareFile1 <- file.path(data_dir, "trip_fare_1.csv")
 ```
 
 ```{r loadAndJoinData, cache=TRUE}
@@ -157,16 +147,15 @@ p9
 
 ### Functions to plot a ROC curve from Chapter 4
 
-```{r echo=FALSE}
-read_chunk('chapter4listings.R')
+```{r echo=TRUE, cache=FALSE}
+chapter4listings_file <- file.path(getwd(), "chapter4listings.R")
+knitr::read_chunk(chapter4listings_file)
 ```
 
-```{r, echo=TRUE,tidy=TRUE, tidy.opts=list(comment=FALSE)}
-<<listing4.3>>
+```{r listing4.3, echo=TRUE}
 ```
 
-```{r, echo=TRUE,tidy=TRUE, tidy.opts=list(comment=FALSE)}
-<<listing4.4>>
+```{r listing4.4, echo=TRUE}
 ```
 
 ```{r plotROC, eval=TRUE, cache=TRUE, dependson="listing4.3"}
@@ -192,9 +181,27 @@ plotROC <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
 
 ### Listing 6.1 Logistic regression tip-prediction model
 
-```{r listing6.1, eval=TRUE, cache=TRUE, dependson="figure6.6"}
+
+```{r listing6.1a, eval=TRUE, cache=TRUE, dependson="figure6.6"}
 numericalData <- dataJoined[,c(8:14,16:18,20)]
-numericalData[,c(1:11)] <- scale(numericalData[,c(1:11)], scale=TRUE)
+numericalData <- numericalData[ , passenger_count := as.numeric(passenger_count)]
+numericalData <- numericalData[ , trip_time_in_secs := as.numeric(trip_time_in_secs)]
+```
+
+```{r, fig.width=8, fig.height=8}
+featurePlot(x = numericalData[, -1], 
+            y = numericalData$tipped, 
+            plot = "pairs",
+            auto.key = list(columns = 3))
+```
+
+```{r}
+cols <- colnames(numericalData)
+numericalData[, (cols) := lapply(.SD, function(x) as.vector(scale(x))), .SDcols = cols]
+```
+
+
+```{r}
 numericalData$tipped <- as.factor(c(dataJoined$tip_amount > 0))
 levels(numericalData$tipped) <- c("false", "true")
 trainIndex <- createDataPartition(numericalData$tipped, p = .8, 
@@ -204,12 +211,18 @@ trainIndex <- createDataPartition(numericalData$tipped, p = .8,
 numericalDataTrain <- numericalData[ trainIndex,]
 numericalDataTest <- numericalData[-trainIndex,]
 
+```
+
+```{r}
 fitControl <- trainControl(method = "repeatedcv", 
                            number = 10, 
                            savePredictions = TRUE,
                            summaryFunction=twoClassSummary, 
                            classProbs=TRUE)
 
+```
+
+```{r}
 plrFit <- train(tipped ~ ., data = numericalDataTrain,
                 method = "plr",
                 trControl = fitControl) 
