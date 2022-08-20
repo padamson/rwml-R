@@ -3,7 +3,9 @@ title: "Real-World Machine Learning"
 subtitle: "Chapter 7"
 author: "Paul Adamson"
 date: "May 20, 2017"
-output: html_document
+format:
+  html:
+    toc: true
 ---
 
 This notebook contains R code to accompany Chapter 7 of the book 
@@ -37,41 +39,43 @@ library(lubridate)
 ### San Francisco Crime Data
 
 San Francisco crime data used for this example is publicly available at 
-https://data.sfgov.org and can be
+<https://data.sfgov.org> and can be
 accessed via the [SODA Consumer API](https://dev.socrata.com/consumers/getting-started.html).
 The `RSocrata` package is used here to interact with the API easily from R. The dataset we
 will be working with (crime data in the years 2003 through May 2018) consists of about 2.1 million
 events. To download the data via the `RSocrata` package, you will need to register for an account at
-[https://www.tylertech.com/products/data-insights](https://www.tylertech.com/products/data-insights), and store your registered email address and password in
+<https://www.tylertech.com/products/data-insights>, and store your registered email address and password in
 `../proprietary_data/socrata_email.txt` and `../proprietary_data/socrata_password.txt`, respectively. 
 If you are not familiar with Socrata and the SODA
 Consumer API, be sure to read the entire [getting started guide](https://dev.socrata.com/consumers/getting-started.html). 
 (The link to create a developer
 account and register an API token is at the bottom of the page.) The API endpoint for the specific dataset
-is at: [https://dev.socrata.com/foundry/data.sfgov.org/tmnf-yvry](https://dev.socrata.com/foundry/data.sfgov.org/tmnf-yvry).
+is at: <https://dev.socrata.com/foundry/data.sfgov.org/tmnf-yvry>.
 
 *NOTE: Depending on your internet connection speed, downloading the data in the next step will take a while. Also, storing the data file will take about a half gigabyte of disk space.*
 
 *NOTE: Working directory should be set to this file's location.*
 
 ```{r getData, cache=TRUE}
-socrata_email <- scan("../proprietary_data/socrata_email.txt",what = "character")
-socrata_password <- scan("../proprietary_data/socrata_password.txt",what = "character")
-dataFile <- "../proprietary_data/socrata_crime.csv"
-
-if(!exists("socrataDF")){ #check to see if dataframe exists in interactive environment
+if(!exists("socrataDF")){ 
+  dataFile <- "../proprietary_data/socrata_crime.csv"
   if(file.exists(dataFile)){
+    print("reading socrataDF from existing data file")
     socrataDF <- read.csv(dataFile)
   } else { 
+    print("downloading data file and reading socrataDF")
+    socrata_email <- scan("../proprietary_data/socrata_email.txt", what = "character")
+    socrata_password <- scan("../proprietary_data/socrata_password.txt", what = "character")
     socrataDF <- read.socrata("https://data.sfgov.org/resource/tmnf-yvry.csv?$where=date between '2003-01-01T00:00:00' and '2014-12-31T23:59:59'", 
                               email = socrata_email,
                               password = socrata_password)
     write.csv(socrataDF, file = "../proprietary_data/socrata_crime.csv")
   }
+} else{
+  print("socrataDF exists, so no need to download or read data")
 }
-
-socrataDF$datechar <- format(socrataDF$date,"%m/%d/%Y")
-socrataDF$datetime <- as.POSIXct(strptime(paste(socrataDF$datechar, socrataDF$time), "%m/%d/%Y %H:%M"))
+socrataDF$date <- ymd(socrataDF$date)
+socrataDF$datetime <- ymd_hm(paste(socrataDF$date, socrataDF$time))
 ```
 
 ### Table 7.3 San Francisco crime data in its raw form, as a sequence of events
@@ -80,10 +84,11 @@ socrataDF$datetime <- as.POSIXct(strptime(paste(socrataDF$datechar, socrataDF$ti
 tableRows <- 10
 kable(head(
   socrataDF %>% 
-    select(c(incidntnum, datetime, datechar, time, pddistrict, category)) %>%
-    filter(datetime > as.POSIXct("2008-04-13") & datetime < as.POSIXct("2008-04-14")) %>%
-    arrange(time) %>%
-    filter(time > "00:50") %>%
+    select(c(incidntnum, datetime, date, time, pddistrict, category)) %>%
+    filter(datetime > as.POSIXct("2008-04-13 00:00") & datetime < as.POSIXct("2008-04-14 01:20")) %>%
+    #arrange(time) %>%
+    arrange(datetime) %>%
+    #filter(time > "00:50") %>%
     select(-datetime),
   tableRows), col.names = c("Incident number", "Date", "Time", "District", "Category"))
   
@@ -111,7 +116,7 @@ box()
 
 ### Listing 7.5 Windowed statistics and differences
 
-```{r listing7.5, cache=TRUE, dependson=listing7.4}
+```{r listing7.5, cache=TRUE, dependson="listing7.4"}
 crimeWindow1 <- window(crimeTS,c(2014,3),c(2014,6)) #crime data from Spring, 2014
 meanWindow1 <- mean(crimeWindow1)
 stdWindow1 <- sd(crimeWindow1)
@@ -129,7 +134,7 @@ kable(data.frame(variable = c("meanWindow1", "meanWindow2", "meanDiff", "stdWind
 ### Figure 7.7 Top: Correlation of the original time series and 12-month lagged time series defines the 12-month autocorrelation.  Bottom: The autocorrelation function for the SF crime data.
 
 ```{r figure7.7, cache=TRUE, dependson="listing7.4"}
-crimeTSlagged <- lag(crimeTS, 12)
+crimeTSlagged <- stats::lag(crimeTS, 12)
 plot(crimeTS,
      xlab = "Year",
      ylab = "Number of crimes",

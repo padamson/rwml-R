@@ -1,4 +1,4 @@
-## @knitr listing4.3
+## ---- listing4.3 ----
 # Returns the false-positive and true-positive rates at nPoints thresholds for 
 # the given true and predicted labels
 # trueLabels: 0=FALSE; 1=TRUE
@@ -29,7 +29,7 @@ rocCurve <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
   return(df)
 }
 
-## @knitr listing4.4
+## ---- listing4.4 ----
 auc <- function(trueLabels, predictedProbs, nPoints=100, posClass=1){
   auc <- 0
   df <- rocCurve(trueLabels = trueLabels,

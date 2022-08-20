@@ -3,7 +3,9 @@ title: "Real-World Machine Learning"
 subtitle: "Chapter 5"
 author: "Paul Adamson"
 date: "April 2, 2017"
-output: html_document
+format:
+  html:
+    toc: true
 ---
 
 This notebook contains R code to accompany Chapter 5 of the book 
