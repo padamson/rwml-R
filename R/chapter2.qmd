@@ -2,7 +2,7 @@
 title: "Real-World Machine Learning"
 subtitle: "Chapter 2"
 author: "Paul Adamson"
-date: "December 7, 2016"
+date: "August 21, 2022"
 format:
   html:
     toc: true
