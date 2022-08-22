@@ -13,7 +13,7 @@ This notebook contains R code to accompany Chapter 6 of the book
 by  Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  The code was 
 contributed by [Paul Adamson](http://github.com/padamson). 
 
-*NOTE: working directory should be set to this file's location.*
+*REMINDER: update `project_dir` below to execute code as interactive code cells*
 
 ```{r setup, include=FALSE}
 set.seed(1111)
