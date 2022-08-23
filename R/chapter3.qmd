@@ -2,7 +2,7 @@
 title: "Real-World Machine Learning" 
 subtitle: "Chapter 3"
 author: "Paul Adamson"
-date: "December 7, 2016"
+date: "August 21, 2022"
 format:
   html:
     toc: true
@@ -13,19 +13,20 @@ This file contains R code to accompany Chapter 3 of the book
 by Henrik Brink, Joseph W. Richards, and Mark Fetherolf.  The code was contributed by
 [Paul Adamson](http://github.com/padamson). 
 
-*NOTE: working directory should be set to this file's location.*
+*REMINDER: update `project_dir` below to execute code as interactive code cells*
 
 ```{r setup, include=FALSE}
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
-library(plyr)
-library(dplyr)
+project_dir <- file.path(Sys.getenv("HOME"), "projects/github-padamson/rwml-R")
+setwd(file.path(project_dir, "R"))
+library(tidyverse)
+library(gridExtra)
 library(vcd)
 library(AppliedPredictiveModeling)
 library(caret)
 library(ellipse)
 library(kknn)
-library(gridExtra)
 library(grid)
 library(randomForest)
 set.seed(3456)
@@ -34,21 +35,30 @@ set.seed(3456)
 
 ## Figure 3.4 A subset of the Titanic Passengers dataset
 
-We are going to be interested in predicting survival, so it is useful to specify 
-the `Survived` variable to be of type `factor`. For visualizing the data, 
-it is also useful to use the `revalue` function to specify the `no` and `yes`
-levels for the `factor` variable. The `kable` function is built into the `knitr`
-package.
+We use the same steps as in Chapter 2 to read in and tidy the
+titanic data.
 
 ```{r figure3.4, cache=TRUE}
 titanic <- read.csv("../data/titanic.csv", 
                     colClasses = c(
                       Survived = "factor",
+                      Sex = "factor",
                       Name = "character",
                       Ticket = "character",
-                      Cabin = "character"))
-titanic$Survived <- revalue(titanic$Survived, c("0"="no", "1"="yes"))
-kable(head(titanic, 6), digits=2)
+                      Cabin = "character")) |>
+  mutate(
+    Survived = fct_recode(Survived,
+      "no"  = "0",
+      "yes" = "1"  
+    )
+  ) |>
+  separate(Cabin, into = "firstCabin", sep = " ", extra = "drop", remove = FALSE) |>
+  separate(firstCabin, into = c("cabinChar", "cabinNum"), sep = 1) |>
+  rowwise() |>
+  mutate(numCabins = length(unlist(strsplit(Cabin, " ")))) |>
+  ungroup()
+
+kable(head(titanic[c("PassengerId", "Survived", "Pclass", "Sex", "Age", "SibSp", "Parch", "Ticket", "Fare", "Cabin", "Embarked")], 6), digits=4)
 ```
 
 ## Figure 3.5 Mosaic plot for Titanic data: Gender vs. survival
