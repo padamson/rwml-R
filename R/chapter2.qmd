@@ -2,7 +2,7 @@
 title: "Real-World Machine Learning"
 subtitle: "Chapter 2"
 author: "Paul Adamson"
-date: "December 7, 2016"
+date: "August 21, 2022"
 format:
   html:
     toc: true
@@ -33,7 +33,10 @@ the categorical `maritalstatus` variable is of class `factor` with levels `singl
 `married`. Then, a new dataframe is created using the `model.matrix` function to convert the `factor` variable to dummy variables. This approach isn't really needed, though, since [R uses factor vectors to represent dummy and categorical data](https://bookdown.org/carillitony/bailey/chp6.html#dummy-variables-in-r). For more discussion on the topic of factor variables in R, see Amelia McNamara and Nicholas Horton’s paper, [Wrangling categorical data in R](https://peerj.com/preprints/3163/). We will avoid the explicit
 use of dummy variables in the remainder of the rwml-R project.
 
-```{r listing2.1}
+The [`kable`](https://bookdown.org/yihui/rmarkdown-cookbook/kable.html) function is built into the `knitr`
+package for generating simple, yet elegant tables of data.
+
+```{r figure2.4}
 personData <- data.frame(
   person = 1:2, 
   name = c("Jane Doe", "John Smith"),
@@ -43,14 +46,17 @@ personData <- data.frame(
 )
 
 kable(personData)
-str(personData)
+```
 
+```{r listing2.1}
 personDataNew <- data.frame(personData[,1:4], 
-                         model.matrix(~ maritalstatus - 1, 
-                                      data = personData)) 
+                            model.matrix(~ maritalstatus - 1, 
+                                         data = personData)) 
 
+```
+
+```{r figure2.6}
 kable(personDataNew)
-str(personDataNew)
 ```
 
 In the call to `model.matrix`, the −1 in the model formula 

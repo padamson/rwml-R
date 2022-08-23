@@ -13,8 +13,8 @@ The [renv](https://rstudio.github.io/renv/) package is used to manage a **r**epr
 
 ## Tidyverse workflow
 
-The [`tidyverse`](https://www.tidyverse.org) collection of packages is used for (``a coherent system of packages for data manipulation, exploration and visualization that share a common design philosophy'')[https://rviews.rstudio.com/2017/06/08/what-is-the-tidyverse/]. The main exceptions to this philosophy are the use of [data.table](https://github.com/Rdatatable/data.table) for larger data (> 2 Gb), ["Visualizing Categorical Data" (`vcd`)](https://cran.r-project.org/web/packages/vcd/vcd.pdf) 
-for exploring categorical data (including mosaic plots), and (`gridExtra`)[https://cran.r-project.org/package=gridExtra]
+The [`tidyverse`](https://www.tidyverse.org) collection of packages is used for ["a coherent system of packages for data manipulation, exploration and visualization that share a common design philosophy"](https://rviews.rstudio.com/2017/06/08/what-is-the-tidyverse/). The main exceptions to this philosophy are the use of [data.table](https://github.com/Rdatatable/data.table) for larger data (> 2 Gb), ["Visualizing Categorical Data" (`vcd`)](https://cran.r-project.org/web/packages/vcd/vcd.pdf) 
+for exploring categorical data (including mosaic plots), and [`gridExtra`](https://cran.r-project.org/package=gridExtra)
 for combining and organizing plots.
 
 ## Quarto publishing system
